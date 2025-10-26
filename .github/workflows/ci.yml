@@ -9,13 +9,13 @@ jobs:
   build-and-test:
     runs-on: ubuntu-latest
     env:
+      # ===== App/DB env =====
       POSTGRES_DB: appdb
       POSTGRES_USER: appuser
       POSTGRES_PASSWORD: appsecret
-      # חשוב: נוסיף גם DATABASE_URL כדי שה-Backend יתחבר ל-Postgres (לא יעבור ל-sqlite)
       DATABASE_URL: postgresql+psycopg2://appuser:appsecret@db:5432/appdb
 
-      # פרמטרים לטסט
+      # ===== Smoke test params =====
       NGINX_HOST_PORT: 80
       BACKEND_CHECK_PATH: "/api/ping"
       EXPECT_PATTERN1: '"status"\\s*:\\s*"ok"'
@@ -24,31 +24,35 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # אופציונלי אבל עוזר: התקנת Buildx (יציב יותר ל-build)
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
       - name: Compose Up
         run: docker compose up -d --build
 
-      - name: Show status
+      - name: Wait for Nginx /healthz (max ~5min)
+        shell: bash
         run: |
-          docker ps -a
-          echo "---- HEALTH ----"
-          docker inspect pro_dev-db-1 | jq '.[0].State.Health' || true
-          echo "---------------"
+          set -euo pipefail
+          for i in {1..150}; do
+            if curl -fsS http://localhost:${NGINX_HOST_PORT}/healthz >/dev/null; then
+              echo "Nginx is up"; exit 0
+            fi
+            echo "[$i/150] waiting for nginx ..." && sleep 2
+          done
+          echo "Nginx did not become ready in time" >&2
+          exit 1
 
-      - name: E2E smoke
-        run: |
-          # נעלה את טיימאאוט ההמתנה (אם צריך)
-          sed -i 's/MAX=90/MAX=150/' tests/smoke_test.sh
-          bash tests/smoke_test.sh
+      - name: Run E2E smoke test (nginx -> backend -> postgres)
+        run: bash tests/smoke_test.sh
 
-      - name: Logs on failure
+      - name: Diagnostics on failure
         if: failure()
-        run: docker compose logs --tail=200 || true
+        run: |
+          echo "=== docker ps ==="
+          docker ps -a || true
+          echo "=== compose logs (tail) ==="
+          docker compose logs --tail=200 || true
+          echo "=== nginx effective config ==="
+          docker compose exec -T nginx nginx -T || true
 
       - name: Compose Down
         if: always()
         run: docker compose down -v
-
