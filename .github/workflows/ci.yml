@@ -15,8 +15,8 @@ jobs:
       POSTGRES_PASSWORD: appsecret
       DATABASE_URL: postgresql+psycopg2://appuser:appsecret@db:5432/appdb
 
-      # ===== Smoke test params =====
-      NGINX_HOST_PORT: 80
+      # ===== Smoke test params (use 8080 in CI) =====
+      NGINX_HOST_PORT: 8080
       BACKEND_CHECK_PATH: "/api/ping"
       EXPECT_PATTERN1: '"status"\\s*:\\s*"ok"'
       EXPECT_PATTERN2: '"db"\\s*:\\s*"connected"'
@@ -24,18 +24,30 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Compose Up
-        run: docker compose up -d --build
+      # ניצור קובץ override שממפה 8080:80 רק ל-CI
+      - name: Create CI compose override
+        run: |
+          cat > ci.compose.override.yml << 'EOF'
+          services:
+            nginx:
+              ports:
+                - "8080:80"
+          EOF
+          echo "Created ci.compose.override.yml:"
+          cat ci.compose.override.yml
+
+      - name: Compose Up (with override)
+        run: docker compose -f docker-compose.yml -f ci.compose.override.yml up -d --build
 
       - name: Wait for Nginx /healthz (max ~5min)
         shell: bash
         run: |
           set -euo pipefail
-          for i in {1..150}; do
-            if curl -fsS http://localhost:${NGINX_HOST_PORT}/healthz >/dev/null; then
-              echo "Nginx is up"; exit 0
+          for i in {1..180}; do
+            if curl -fsS "http://localhost:${NGINX_HOST_PORT}/healthz" >/dev/null; then
+              echo "Nginx is up on ${NGINX_HOST_PORT}"; exit 0
             fi
-            echo "[$i/150] waiting for nginx ..." && sleep 2
+            echo "[$i/180] waiting for nginx on port ${NGINX_HOST_PORT} ..." && sleep 2
           done
           echo "Nginx did not become ready in time" >&2
           exit 1
@@ -48,11 +60,13 @@ jobs:
         run: |
           echo "=== docker ps ==="
           docker ps -a || true
-          echo "=== compose logs (tail) ==="
-          docker compose logs --tail=200 || true
-          echo "=== nginx effective config ==="
-          docker compose exec -T nginx nginx -T || true
+          echo "=== compose ps ==="
+          docker compose -f docker-compose.yml -f ci.compose.override.yml ps || true
+          echo "=== logs (tail) ==="
+          docker compose -f docker-compose.yml -f ci.compose.override.yml logs --tail=200 || true
+          echo "=== nginx config ==="
+          docker compose -f docker-compose.yml -f ci.compose.override.yml exec -T nginx nginx -T || true
 
       - name: Compose Down
         if: always()
-        run: docker compose down -v
+        run: docker compose -f docker-compose.yml -f ci.compose.override.yml down -v
