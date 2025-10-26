@@ -6,10 +6,10 @@ services:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
       timeout: 3s
-      retries: 20
+      retries: 30
     volumes:
       - pgdata:/var/lib/postgresql/data
     networks: [appnet]
@@ -18,44 +18,29 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.backend
+    working_dir: /app
     environment:
       FLASK_DEBUG: "1"
-      FLASK_APP: run.py
+      FLASK_APP: wsgi.py
       DATABASE_URL: ${DATABASE_URL}
       SECRET_KEY: ${SECRET_KEY}
       FLASK_ENV: ${FLASK_ENV}
       DB_INIT_RETRIES: ${DB_INIT_RETRIES}
       DB_INIT_DELAY: ${DB_INIT_DELAY}
-
-
-    command: bash -lc "flask run --host=0.0.0.0 --port=8000"
-
+    command: ["python","-m","flask","run","--host=0.0.0.0","--port=8000"]
     depends_on:
       db:
         condition: service_healthy
     ports:
       - "8000:8000"
-    networks: [appnet]
     volumes:
       - ./:/app
     healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "python - << 'PY'\nimport urllib.request,sys\n" \
-          "import time\n" \
-          "url='http://localhost:8000/api/ping'\n" \
-          "try:\n" \
-          "  urllib.request.urlopen(url, timeout=2)\n" \
-          "  sys.exit(0)\n" \
-          "except Exception:\n" \
-          "  sys.exit(1)\nPY"
-        ]
+      test: ["CMD-SHELL", "python -c 'import urllib.request,sys; urllib.request.urlopen(\"http://localhost:8000/api/ping\", timeout=2); sys.exit(0)' || exit 1"]
       interval: 5s
       timeout: 3s
       retries: 60
-
-
+    networks: [appnet]
 
   nginx:
     image: nginx:alpine
@@ -69,7 +54,7 @@ services:
     networks: [appnet]
 
 volumes:
-  pgdata:
+  pgdata: {}
 
 networks:
   appnet:
