@@ -9,14 +9,11 @@ jobs:
   build-and-test:
     runs-on: ubuntu-latest
     env:
-      # ===== App/DB env =====
       POSTGRES_DB: appdb
       POSTGRES_USER: appuser
       POSTGRES_PASSWORD: appsecret
       DATABASE_URL: postgresql+psycopg2://appuser:appsecret@db:5432/appdb
-
-      # ===== Smoke test params (use 8080 in CI) =====
-      NGINX_HOST_PORT: 8080
+      NGINX_HOST_PORT: 8080   # CI על 8080
       BACKEND_CHECK_PATH: "/api/ping"
       EXPECT_PATTERN1: '"status"\\s*:\\s*"ok"'
       EXPECT_PATTERN2: '"db"\\s*:\\s*"connected"'
@@ -24,8 +21,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # ניצור קובץ override שממפה 8080:80 רק ל-CI
-      - name: Create CI compose override
+      - name: Create CI compose override (8080->80)
         run: |
           cat > ci.compose.override.yml << 'EOF'
           services:
@@ -33,8 +29,6 @@ jobs:
               ports:
                 - "8080:80"
           EOF
-          echo "Created ci.compose.override.yml:"
-          cat ci.compose.override.yml
 
       - name: Compose Up (with override)
         run: docker compose -f docker-compose.yml -f ci.compose.override.yml up -d --build
@@ -57,15 +51,30 @@ jobs:
 
       - name: Diagnostics on failure
         if: failure()
+        shell: bash
         run: |
+          set +e
           echo "=== docker ps ==="
-          docker ps -a || true
+          docker ps -a
           echo "=== compose ps ==="
-          docker compose -f docker-compose.yml -f ci.compose.override.yml ps || true
-          echo "=== logs (tail) ==="
-          docker compose -f docker-compose.yml -f ci.compose.override.yml logs --tail=200 || true
-          echo "=== nginx config ==="
-          docker compose -f docker-compose.yml -f ci.compose.override.yml exec -T nginx nginx -T || true
+          docker compose -f docker-compose.yml -f ci.compose.override.yml ps
+          echo "=== LAST 200 LOG LINES: backend ==="
+          docker compose -f docker-compose.yml -f ci.compose.override.yml logs --tail=200 backend
+          echo "=== LAST 200 LOG LINES: nginx ==="
+          docker compose -f docker-compose.yml -f ci.compose.override.yml logs --tail=200 nginx
+          echo "=== LAST 200 LOG LINES: db ==="
+          docker compose -f docker-compose.yml -f ci.compose.override.yml logs --tail=200 db
+          echo "=== CURL backend directly (bypass nginx) ==="
+          curl -v http://localhost:8000/api/ping || true
+          # save full logs to file
+          docker compose -f docker-compose.yml -f ci.compose.override.yml logs > compose-logs.txt || true
+
+      - name: Upload logs artifact
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: compose-logs
+          path: compose-logs.txt
 
       - name: Compose Down
         if: always()
