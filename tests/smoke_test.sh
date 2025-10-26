@@ -21,19 +21,23 @@ for i in $(seq 1 "$MAX"); do
 done
 
 echo "==> קורא ל- ${BASE}${PATH_TO_CHECK}"
-RESP="$(curl -fsS "${BASE}${PATH_TO_CHECK}")" || {
-  echo "בקשה נכשלה אל ${BASE}${PATH_TO_CHECK}" >&2; exit 1; }
-
+RESP="$(curl -fsS "${BASE}${PATH_TO_CHECK}")"
 echo "Response: ${RESP}"
 
-# אסרטים אופציונליים
-if [[ -n "${EXPECT_PATTERN1:-}" ]]; then
-  echo "${RESP}" | grep -Eq "${EXPECT_PATTERN1}" || {
-    echo "לא נמצא EXPECT_PATTERN1: ${EXPECT_PATTERN1}" >&2; exit 1; }
-fi
-if [[ -n "${EXPECT_PATTERN2:-}" ]]; then
-  echo "${RESP}" | grep -Eq "${EXPECT_PATTERN2}" || {
-    echo "לא נמצא EXPECT_PATTERN2: ${EXPECT_PATTERN2}" >&2; exit 1; }
-fi
+# אימות JSON: status == ok AND db == connected (בלי תלות בסדר/רווחים)
+python - << 'PY' "${RESP}"
+import sys, json
+raw = sys.argv[1]
+try:
+    data = json.loads(raw)
+except Exception as e:
+    print("ERROR: invalid JSON:", e); sys.exit(1)
+status_ok = (str(data.get("status")) == "ok")
+db_ok = (str(data.get("db")) == "connected")
+if status_ok and db_ok:
+    print("JSON check passed.")
+    sys.exit(0)
+print("JSON check failed. Got:", data); sys.exit(1)
+PY
 
 echo "E2E smoke test passed."
