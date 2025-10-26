@@ -1,0 +1,95 @@
+﻿{% extends "base.html" %}
+{% block title %}חומרי לימוד{% endblock %}
+
+{% block content %}
+<div class="container">
+  <div class="mb-3">
+    <a class="btn" href="{{ url_for('teacher.dashboard') }}">דף הבית</a>
+  </div>
+  <h1 class="mb-4">חומרי לימוד לתלמידים</h1>
+  <div style="display:flex; gap:1.5rem; flex-wrap:wrap; align-items:flex-start;">
+    <aside style="flex:1 1 220px; max-width:260px;">
+      <div class="card" style="position:sticky; top:1rem;">
+        <div class="card-body">
+          <h3 class="card-title">התלמידים שלי</h3>
+          {% if students %}
+            <ul class="list">
+              {% for student in students %}
+                <li>
+                  <a href="{{ url_for('teacher.materials_manage', student_id=student.id) }}" class="{% if selected_student and selected_student.id == student.id %}fw-bold{% endif %}">
+                    {{ student.username }}
+                  </a>
+                </li>
+              {% endfor %}
+            </ul>
+          {% else %}
+            <p>עדיין אין תלמידים משויכים.</p>
+          {% endif %}
+        </div>
+      </div>
+    </aside>
+
+    <section style="flex:3 1 520px; min-width:320px;">
+      {% if selected_student %}
+      <div class="card mb-4">
+        <div class="card-body">
+          <h3 class="card-title">הוספת חומר ל{{ selected_student.username }}</h3>
+          <form method="post" enctype="multipart/form-data" class="form" style="display:grid; gap:0.75rem;">
+            {% if csrf_token %}<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">{% endif %}
+            <input type="hidden" name="student_id" value="{{ selected_student.id }}">
+
+            <label for="title">כותרת *</label>
+            <input id="title" name="title" required>
+
+            <label for="description">תיאור</label>
+            <textarea id="description" name="description" rows="3"></textarea>
+
+            <label for="link_url">קישור (אם קיים)</label>
+            <input id="link_url" name="link_url" placeholder="https://example.com">
+
+            <label for="file">קובץ</label>
+            <input id="file" name="file" type="file">
+            <small class="text-muted">ניתן להעלות קובץ, להוסיף קישור או תיאור – או לשלב ביניהם.</small>
+
+            <div class="card-actions">
+              <button class="btn btn-primary" type="submit">שמירת חומר</button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-body">
+          <h3 class="card-title">חומרים קיימים</h3>
+          {% if materials %}
+            <ul class="list">
+              {% for m in materials %}
+                <li>
+                  <div style="display:flex; justify-content:space-between; gap:1rem; flex-wrap:wrap;">
+                    <div>
+                      <strong>{{ m.title }}</strong>
+                      {% if m.description %}<div class="text-muted">{{ m.description }}</div>{% endif %}
+                      {% if m.link_url %}<div><a href="{{ m.link_url }}" target="_blank" rel="noopener">פתיחת קישור</a></div>{% endif %}
+                      {% if m.file_path %}<div><a href="{{ url_for('teacher.material_download', material_id=m.id) }}">הורדת קובץ{% if m.file_name %} ({{ m.file_name }}){% endif %}</a></div>{% endif %}
+                      <small class="text-muted">נוסף {{ m.created_at.strftime('%d/%m/%Y %H:%M') }}</small>
+                    </div>
+                    <form method="post" action="{{ url_for('teacher.material_delete', material_id=m.id) }}" onsubmit="return confirm('למחוק את החומר?');">
+                      {% if csrf_token %}<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">{% endif %}
+                      <button class="btn btn-outline" type="submit">מחיקה</button>
+                    </form>
+                  </div>
+                </li>
+              {% endfor %}
+            </ul>
+          {% else %}
+            <p>עוד לא הוספת חומרים לתלמיד זה.</p>
+          {% endif %}
+        </div>
+      </div>
+      {% else %}
+        <p>בחרו תלמיד מהרשימה כדי להציג ולהוסיף חומרים.</p>
+      {% endif %}
+    </section>
+  </div>
+</div>
+{% endblock %}

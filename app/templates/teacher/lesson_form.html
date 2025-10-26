@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}שיעור חדש{% endblock %}
+
+{% block content %}
+<h1>שיעור חדש</h1>
+
+<form method="post" class="form card"
+      data-default-price="{{ default_price|default(110)|int }}">
+
+
+  <!-- תלמיד -->
+  <label for="student_id">תלמיד</label>
+  {% set selected_id = (request.form.get('student_id') or 0)|int %}
+  <select name="student_id" id="student_id" required>
+    {% for s in students %}
+      <option
+        value="{{ s.id }}"
+        data-rate="{{ (s.student_rate or 110)|round(2) }}"
+        {{ 'selected' if s.id == selected_id else '' }}>
+        {{ s.username }} — {{ grade_label(s.grade) }}{% if s.school %} · {{ s.school }}{% endif %}
+      </option>
+    {% endfor %}
+  </select>
+
+  <!-- תאריך ושעת התחלה -->
+  <label for="start_at">תאריך ושעת התחלה</label>
+  <input type="datetime-local" name="start_at" id="start_at"
+         value="{{ request.form.get('start_at','') }}" min="{{ min_start|default('') }}" required>
+
+  <!-- משך בדקות (דיפולט 60) -->
+  <label for="duration_minutes">משך (דקות)</label>
+  <input type="number" name="duration_minutes" id="duration_minutes"
+         value="{{ request.form.get('duration_minutes') or 60 }}" min="15" step="5" required>
+  <small id="end_preview" class="text-muted"></small>
+
+  <!-- מחיר לשעה (דיפולט 110 / או לפי התלמיד) -->
+  <label for="price_per_hour">מחיר לשעה (₪)</label>
+  <input type="number" name="price_per_hour" id="price_per_hour"
+         value="{{ request.form.get('price_per_hour') or (default_price or 110) }}"
+         min="0" step="0.01" required>
+  <small class="text-muted">אם לא תזין/י, יילקח מתעריף התלמיד או 110₪.</small>
+
+  <!-- הערות -->
+  <label for="note">הערות</label>
+  <textarea name="note" id="note" rows="3" placeholder="הערה (לא חובה)">{{ request.form.get('note','') }}</textarea>
+
+  <div class="card-actions">
+    <button class="btn btn-primary" type="submit">שמור</button>
+    <a class="btn" href="{{ url_for('teacher.dashboard') }}">בטל</a>
+  </div>
+</form>
+
+<script>
+  // סנכרון מחיר ברירת־מחדל לפי התלמיד (data-rate) בלי Jinja בתוך JS
+  (function syncRate() {
+    var sel   = document.getElementById('student_id');
+    var price = document.getElementById('price_per_hour');
+
+    // קוראים את ברירת־המחדל מה־form (data-default-price)
+    var form = document.querySelector('form.form.card');
+    var DEFAULT_PRICE = parseFloat(form?.dataset?.defaultPrice || '110');
+
+    function apply() {
+      var opt = sel.options[sel.selectedIndex];
+      var r   = parseFloat(opt.getAttribute('data-rate') || '0');
+      var cur = parseFloat(price.value || '0');
+
+      if (!price.value || isNaN(cur) || cur <= 0) {
+        price.value = (r > 0 ? r : DEFAULT_PRICE);
+      }
+    }
+
+    sel.addEventListener('change', apply);
+    if (!price.value) apply();
+  })();
+</script>
+
+
+{% endblock %}

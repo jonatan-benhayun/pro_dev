@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{% block title %}המערכת שלי{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<script src="{{ url_for('static', filename='password-toggle.js') }}"></script>
+<body>
+  <header class="topbar">
+  <nav class="spread">
+    <div class="nav-right">
+      {% if current_user.is_authenticated %}
+        {% if request.endpoint == 'main.calendar_view' %}
+          <a class="btn btn-sm" href="{{ home_url() }}">דף בית</a>
+        {% else %}
+          <a class="btn btn-sm" href="{{ url_for('main.calendar_view') }}">לוח שנה</a>
+        {% endif %}
+        {% if current_user.role == 'teacher' and request.endpoint == 'teacher.lessons_completed' %}
+          <a class="btn btn-sm" href="{{ url_for('teacher.dashboard') }}">דף הבית</a>
+        {% endif %}
+      {% endif %}
+    </div>
+    <div class="nav-left">
+      {% if current_user.is_authenticated %}
+        <a class="btn btn-outline" href="{{ url_for('auth.logout') }}">התנתק</a>
+      {% else %}
+        <a class="btn btn-primary" href="{{ url_for('auth.login') }}">התחבר</a>
+      {% endif %}
+    </div>
+  </nav>
+</header>
+  <main class="container">
+    {% with msgs = get_flashed_messages(with_categories=true) %}
+      {% if msgs %}
+        <ul class="flash">
+          {% for cat, msg in msgs %}
+            <li class="{{ cat }}">{{ msg }}</li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+    {% endwith %}
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

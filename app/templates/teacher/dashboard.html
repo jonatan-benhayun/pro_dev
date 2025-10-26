@@ -1,0 +1,175 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>דשבורד מורה</h1>
+
+{% if past_due_lessons %}
+<style>
+  .overdue-modal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;z-index:90;}
+  .overdue-backdrop{position:absolute;inset:0;background:rgba(0,0,0,.35);}
+  .overdue-dialog{position:relative;background:#fff;border-radius:18px;padding:1.5rem;max-width:420px;width:90%;box-shadow:0 20px 45px rgba(0,0,0,.25);direction:rtl;text-align:right;display:flex;flex-direction:column;gap:1rem;}
+  .overdue-card{display:none;flex-direction:column;gap:.75rem;}
+  .overdue-card.active{display:flex;}
+  .overdue-actions{display:flex;flex-wrap:wrap;gap:.5rem;}
+  .overdue-actions form{display:inline;}
+  .overdue-close{position:absolute;top:.75rem;left:.75rem;background:transparent;border:none;font-size:1.5rem;cursor:pointer;}
+</style>
+<div id="overdue-modal" class="overdue-modal" aria-hidden="true">
+  <div class="overdue-backdrop"></div>
+  <div class="overdue-dialog" role="dialog" aria-modal="true" aria-label="שיעורים שעבר זמנם">
+    <button type="button" class="overdue-close" data-overdue-close>&times;</button>
+    <h3>שיעורים שהסתיימו</h3>
+    <p>יש {{ past_due_lessons|length }} שיעורים שזמן הסיום שלהם עבר. מה ברצונך לעשות?</p>
+    {% for lesson in past_due_lessons %}
+    <div class="overdue-card" data-index="{{ loop.index0 }}">
+      <div>
+        <strong>{{ lesson.student.username }}</strong>
+        <div class="text-muted">{{ lesson.start_at.strftime('%d/%m/%Y %H:%M') }} - {{ lesson.end_at.strftime('%H:%M') }}</div>
+      </div>
+      <div class="overdue-actions">
+        <form method="post" action="{{ url_for('teacher.lesson_mark_done', lesson_id=lesson.id) }}">
+          {% if csrf_token %}<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">{% endif %}
+          <button class="btn btn-primary" type="submit">סמן בוצע</button>
+        </form>
+        <form method="post" action="{{ url_for('teacher.lesson_cancel', lesson_id=lesson.id) }}">
+          {% if csrf_token %}<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">{% endif %}
+          <button class="btn btn-outline" type="submit">סמן בוטל</button>
+        </form>
+        <a class="btn" href="{{ url_for('teacher.lesson_edit', lesson_id=lesson.id) }}">עדכן תאריך</a>
+      </div>
+    </div>
+    {% endfor %}
+    <div style="display:flex;justify-content:space-between;gap:.5rem;">
+      <button type="button" class="btn btn-outline" data-overdue-next>הבא</button>
+      <button type="button" class="btn" data-overdue-close>הזכר לי מאוחר יותר</button>
+    </div>
+  </div>
+</div>
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    var modal = document.getElementById('overdue-modal');
+    if (!modal) return;
+    var cards = Array.from(modal.querySelectorAll('.overdue-card'));
+    if (!cards.length) return;
+    var idx = 0;
+    function showCard(i) {
+      cards.forEach(function (card, index) {
+        card.classList.toggle('active', index === i);
+      });
+    }
+    function openModal() {
+      modal.style.display = 'flex';
+      modal.setAttribute('aria-hidden', 'false');
+      showCard(idx);
+    }
+    function closeModal() {
+      modal.style.display = 'none';
+      modal.setAttribute('aria-hidden', 'true');
+    }
+    modal.querySelectorAll('[data-overdue-close]').forEach(function (btn) {
+      btn.addEventListener('click', closeModal);
+    });
+    var nextBtn = modal.querySelector('[data-overdue-next]');
+    if (nextBtn) {
+      nextBtn.addEventListener('click', function () {
+        idx = (idx + 1) % cards.length;
+        showCard(idx);
+      });
+    }
+    openModal();
+  });
+</script>
+{% endif %}
+
+
+<h2>התלמידים שלי</h2>
+<ul>
+  {% for s in students %}
+    <li>
+      {{ s.username }} — {{ grade_label(s.grade) }}
+      {% if s.school %} · {{ s.school }}{% endif %}
+      <span class="badge badge-ghost">₪{{ (s.student_rate or 110)|round(2) }}/שעה</span>
+      <a href="{{ url_for('teacher.student_edit', student_id=s.id) }}" class="btn btn-xs btn-outline">ערוך</a>
+    </li>
+  {% else %}
+    <li>אין תלמידים משויכים</li>
+  {% endfor %}
+</ul>
+
+<h2 class="mt-6">שיעורים אחרונים</h2>
+<a class="btn btn-primary" href="{{ url_for('teacher.lesson_new') }}">+ שיעור חדש</a>
+  <a class="btn btn-outline" href="{{ url_for('teacher.lessons_completed') }}">שיעורים שהושלמו</a>
+  <a class="btn btn-outline" href="{{ url_for('main.edit_profile') }}">ערוך פרופיל</a>
+  <a class="btn btn-outline" href="{{ url_for('teacher.materials_manage') }}">חומרי לימוד</a>
+
+<table class="table" style="margin-top:1rem">
+  <thead>
+    <tr>
+      <th>תאריך</th>
+      <th>שעות</th>
+      <th>תלמיד</th>
+      <th>משך</th>
+      <th>עלות</th>
+      <th>סטטוס</th>
+      <th style="width: 320px;"></th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for l in lessons %}
+    <tr class="{% if l.status == 'cancelled' %}opacity-60{% endif %}">
+      <td>{{ l.start_at.date() }}</td>
+      <td>{{ l.start_at.strftime("%H:%M") }}–{{ l.end_at.strftime("%H:%M") }}</td>
+      <td>{{ l.student.username }}</td>
+      <td>{{ l.duration_minutes }} דק'</td>
+      <td>₪{{ '%.2f'|format(l.cost) }}</td>
+      <td>{{ l.status or 'scheduled' }}</td>
+      <td class="whitespace-nowrap" style="white-space:nowrap">
+        <form method="post"
+              action="{{ url_for('teacher.lesson_mark_done', lesson_id=l.id) }}"
+              class="inline-flex items-center gap-2"
+              style="display:inline-flex; gap:.5rem; align-items:center">
+
+          {% if csrf_token %}
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          {% endif %}
+
+          <!-- סמן בוצע -->
+          <button type="submit"
+                  class="btn btn-xs btn-outline"
+                  {% if l.status in ['done','cancelled'] %}disabled{% endif %}>
+            סמן בוצע
+          </button>
+
+          <!-- סמן בוטל (שולח לאנדפוינט אחר דרך formaction) -->
+          <button type="submit"
+                  class="btn btn-xs btn-outline"
+                  formaction="{{ url_for('teacher.lesson_cancel', lesson_id=l.id) }}"
+                  {% if l.status == 'cancelled' %}disabled{% endif %}>
+            סמן בוטל
+          </button>
+
+          <!-- עדכן תאריך (קישור רגיל) -->
+          <a class="btn btn-xs btn-outline"
+            href="{{ url_for('teacher.lesson_edit', lesson_id=l.id) }}">
+            עדכן תאריך
+          </a>
+        </form>
+      </td>
+
+    </tr>
+  {% else %}
+    <tr><td colspan="7">אין שיעורים</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+
+<script>
+  document.addEventListener('click', function (e) {
+    const btn = e.target.closest('button');
+    if (!btn) return;
+    const txt = btn.textContent.trim();
+    if (txt.includes('סמן בוצע') && !confirm('לסמן את השיעור כ"בוצע"?')) e.preventDefault();
+    if (txt.includes('סמן בוטל') && !confirm('לבטל את השיעור?')) e.preventDefault();
+    if (txt.includes('שחזר') && !confirm('לשחזר את השיעור?')) e.preventDefault();
+  }, { passive: false });
+</script>
+{% endblock %}

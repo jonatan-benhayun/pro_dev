@@ -1,0 +1,36 @@
+name: CI (Compose + E2E)
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    env:
+      # ערכי דמו — אם תרצה, נעביר לסודות בהמשך
+      POSTGRES_DB: appdb
+      POSTGRES_USER: appuser
+      POSTGRES_PASSWORD: appsecret
+      # הגדרות לטסט
+      NGINX_HOST_PORT: 80
+      BACKEND_CHECK_PATH: "/api/ping"
+      EXPECT_PATTERN1: '"status"\\s*:\\s*"ok"'
+      EXPECT_PATTERN2: '"db"\\s*:\\s*"connected"'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compose Up
+        run: docker compose up -d --build
+
+      - name: Peek logs
+        if: failure()
+        run: docker compose logs --tail=200 || true
+
+      - name: E2E smoke
+        run: bash tests/smoke_test.sh
+
+      - name: Compose Down
+        if: always()
+        run: docker compose down -v

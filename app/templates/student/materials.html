@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}חומרי לימוד{% endblock %}
+
+{% block content %}
+<div class="container">
+  <h2 class="mb-4">חומרי לימוד</h2>
+
+  {% if materials %}
+    <div class="list">
+      {% for m in materials %}
+        <div class="card" style="margin-bottom:1rem;">
+          <div class="card-body">
+            <h3 class="card-title">{{ m.title }}</h3>
+            {% if m.description %}<p class="card-text">{{ m.description }}</p>{% endif %}
+            <div style="display:flex; gap:.75rem; flex-wrap:wrap;">
+              {% if m.link_url %}<a class="btn btn-outline" href="{{ m.link_url }}" target="_blank" rel="noopener">פתיחת קישור</a>{% endif %}
+              {% if m.file_path %}<a class="btn btn-outline" href="{{ url_for('student.material_download', material_id=m.id) }}">הורדת קובץ{% if m.file_name %} ({{ m.file_name }}){% endif %}</a>{% endif %}
+            </div>
+            <small class="text-muted" style="display:block; margin-top:.75rem;">עודכן {{ m.created_at.strftime('%d/%m/%Y %H:%M') }}</small>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <p>עוד לא הוקצו חומרים. כשתקבלו—הכל יופיע כאן.</p>
+  {% endif %}
+
+  <div class="mt-3">
+    <a class="btn" href="{{ url_for('student.dashboard') }}">חזרה לדף הבית</a>
+  </div>
+</div>
+{% endblock %}

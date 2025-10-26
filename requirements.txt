@@ -1,0 +1,10 @@
+flask
+flask-login
+flask-sqlalchemy
+flask-migrate
+gunicorn
+psycopg2-binary
+reportlab
+python-bidi
+python-dotenv
+Faker

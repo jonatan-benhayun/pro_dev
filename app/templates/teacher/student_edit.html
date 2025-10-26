@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container">
+  <h2>עריכת תלמיד: {{ student.username }}</h2>
+
+  <form method="POST">
+    <!-- כיתה -->
+    <div class="form-control">
+      <label class="label">
+        <span class="label-text">כיתה</span>
+        <span class="label-text-alt">{{ grade_label(student.grade) }}</span>
+      </label>
+
+      <select name="grade" id="grade" class="select select-bordered" required>
+        {% set chosen = (request.form.get('grade') or student.grade)|int %}
+        {% for val, label in grades %}  {# grades = GRADE_CHOICES [(1,"א׳"), ...] #}
+          <option value="{{ val }}" {{ 'selected' if val == chosen else '' }}>
+            {{ label }}
+          </option>
+        {% endfor %}
+      </select>
+    </div>
+
+
+    <!-- תעריף לשעה -->
+    <div class="form-control mt-4">
+      <label class="label"><span class="label-text">תעריף לשעה (₪)</span></label>
+      <input
+        name="student_rate"
+        type="number"
+        step="0.01"
+        min="0"
+        class="input input-bordered"
+        value="{{ student.student_rate if student else 0 }}"
+        required
+      >
+      <label class="label">
+        <span class="label-text-alt">התעריף ישמש לשיעורים עתידיים</span>
+      </label>
+    </div>
+
+    <!-- כפתורים -->
+    <div class="mt-6 flex gap-4">
+      <button type="submit" class="btn btn-primary">שמור שינויים</button>
+      <a href="{{ url_for('teacher.dashboard') }}" class="btn">חזרה</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

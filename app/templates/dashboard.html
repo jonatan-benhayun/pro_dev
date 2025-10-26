@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+<div class="container">
+  <header class="dash-header">
+    <div>
+      <h1>שלום, {{ user.username }} 👋</h1>
+      <p class="muted">
+        מחובר עם {{ user.email }}{% if days_since is not none %} · חבר כבר {{ days_since }} ימים{% endif %}
+      </p>
+    </div>
+    <nav class="dash-actions">
+      <a class="btn btn-ghost" href="{{ url_for('main.landing') }}">דף הבית</a>
+      <a class="btn btn-danger" href="{{ url_for('auth.logout') }}">התנתקות</a>
+    </nav>
+  </header>
+
+  <section class="grid">
+    <!-- כרטיס פרופיל -->
+    <article class="card">
+      <h3>הפרופיל שלי</h3>
+      <dl class="meta">
+        <div><dt>שם משתמש</dt><dd>{{ user.username }}</dd></div>
+        <div><dt>אימייל</dt><dd>{{ user.email }}</dd></div>
+        <div><dt>כיתה</dt><dd>{{ user.grade or "—" }}</dd></div>
+        <div><strong>בית ספר</strong> {{ current_user.school or "—" }}</div>
+      </dl>
+      <div class="card-actions">
+        <a class="btn" href="{{ url_for('main.edit_profile') }}">עריכת פרופיל</a>
+      </div>
+    </article>
+
+    <!-- פעולות מהירות -->
+    <article class="card">
+      <h3>פעולות מהירות</h3>
+      <ul class="quick">
+        <li><a href="{{ url_for('main.create_item') }}">➕ צור פריט חדש</a></li>
+        <li><a href="{{ url_for('main.landing') }}">🏠 חזרה לדף הבית</a></li>
+        <li><a href="{{ url_for('auth.logout') }}">🚪 התנתקות</a></li>
+      </ul>
+      <p class="muted small">את ה"פריט" נבנה בשלבים הבאים (טבלאות/משימות/רשומות).</p>
+    </article>
+
+    <!-- סטטוס/מדדים (Placeholder) -->
+    <article class="card">
+      <h3>סטטוס מערכת</h3>
+      <ul class="stats">
+        <li><span class="k">0</span><small>פריטים</small></li>
+        <li><span class="k">0</span><small>משימות</small></li>
+        <li><span class="k">1</span><small>משתמש</small></li>
+      </ul>
+      <p class="muted small">נעדכן את זה כשנוסיף מודל אמיתי.</p>
+    </article>
+  </section>
+
+  <section class="card mt">
+    <h3>פעילות אחרונה</h3>
+    <div class="empty">
+      עדיין אין פעילות להצגה. תתחיל ביצירה ראשונה 👉
+      <a class="btn btn-primary" href="{{ url_for('main.create_item') }}">צור פריט</a>
+    </div>
+  </section>
+</div>
+{% endblock %}

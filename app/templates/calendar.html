@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% block title %}לוח שנה{% endblock %}
+
+{% block content %}
+<div class="container">
+  <h2>לוח שנה</h2>
+
+  <style>
+    /* חשוב: תן ליומן שטח נראה */
+    #calendar{
+      min-height: 620px;               /* בלי זה נראה "ריק" */
+      background: var(--panel, #fff);
+      border: 1px solid var(--line, #e9e4dc);
+      border-radius: 20px;
+      padding: 12px;
+      box-shadow: 0 4px 14px rgba(0,0,0,.06);
+    }
+  </style>
+
+  <div id="calendar"></div>
+</div>
+
+<!-- FullCalendar CDN -->
+<link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.css" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/locales-all.global.min.js"></script>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  const el = document.getElementById('calendar');
+  if (!window.FullCalendar) {
+    el.innerHTML = '<div style="padding:16px;color:#a00">נראה שהספריות של FullCalendar לא נטענו (CDN). בדוק קונסול/רשת.</div>';
+    return;
+  }
+  const calendar = new FullCalendar.Calendar(el, {
+    initialView: 'dayGridMonth',
+    locale: 'he',
+    direction: 'rtl',
+    height: 'auto',
+    headerToolbar: {
+      start: 'title',
+      center: '',
+      end: 'dayGridMonth,timeGridWeek,timeGridDay,listWeek prev,next today'
+    },
+    navLinks: true,
+    nowIndicator: true,
+    slotMinTime: '08:00:00',
+    slotMaxTime: '21:00:00',
+    eventTimeFormat: { hour: '2-digit', minute: '2-digit', hour12: false },
+    events: '{{ url_for("main.calendar_events") }}',
+    loading(isLoading){ el.style.opacity = isLoading ? '0.6' : '1'; },
+    failure(){ alert('טעינת האירועים נכשלה'); },
+
+    eventClick(info) {
+        const e = info.event;
+        const p = e.extendedProps || {};
+        console.log('EVENT CLICK HANDLER ✅', p);   // חייב להופיע בקונסול בלחיצה
+
+        const startStr = e.start?.toLocaleString('he-IL') || '';
+        const endStr   = e.end?.toLocaleString('he-IL') || '';
+
+        // ✅ חסם מוקדם: אם אין הרשאה להציג תשלום/מצב — יוצאים מוקדם ואין מצב שזה יופיע
+        if (p.show_payment !== true) {
+          alert(
+            (p.role_view === 'teacher'
+              ? `תלמיד: ${p.student || ''}\n`
+              : `מורה: ${p.teacher || ''}\n`) +
+            `התחלה: ${startStr}\nסיום: ${endStr}`
+          );
+          return;  // <<< לא מגיעים לשום "מצב/שולם"
+        }
+
+        // למורה בלבד
+        const status = p.status || '';
+        const paidStatus = p.paid_status || '';
+        const paidAmount = p.paid_amount || '';
+        const paidLine = paidAmount ? `${paidStatus} (${paidAmount})` : paidStatus;
+
+        let msg =
+          (p.role_view === 'teacher'
+            ? `תלמיד: ${p.student || ''}\n`
+            : `מורה: ${p.teacher || ''}\n`) +
+          `התחלה: ${startStr}\n` +
+          `סיום: ${endStr}`;
+
+        if (status || paidStatus || paidAmount) {
+          msg += `\nמצב: ${status}\nשולם: ${paidLine}`;
+        }
+
+        alert(msg);
+      }
+ 
+  });
+  calendar.render();
+});
+</script>
+{% endblock %}

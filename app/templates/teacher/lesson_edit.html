@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}עריכת שיעור{% endblock %}
+
+{% block content %}
+<div class="container" style="max-width:640px;">
+  <h1 class="mb-4">עריכת שיעור</h1>
+
+  <form method="post" class="form card" style="display:grid; gap:1rem;">
+    {% if csrf_token %}<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">{% endif %}
+
+    <div class="form-control">
+      <label>תלמיד</label>
+      <input value="{{ lesson.student.username }}" readonly>
+    </div>
+
+    <div class="form-control">
+      <label for="start_at">שעת התחלה</label>
+      <input type="datetime-local" id="start_at" name="start_at"
+             value="{{ lesson.start_at.strftime('%Y-%m-%dT%H:%M') }}"
+             min="{{ min_start }}" required>
+    </div>
+
+    <div class="form-control">
+      <label for="end_at">שעת סיום</label>
+      <input type="datetime-local" id="end_at" name="end_at"
+             value="{{ lesson.end_at.strftime('%Y-%m-%dT%H:%M') }}" required>
+    </div>
+
+    <div class="card-actions" style="display:flex; gap:.75rem;">
+      <button class="btn btn-primary" type="submit">שמירת שינויים</button>
+      <a class="btn" href="{{ url_for('teacher.dashboard') }}">ביטול</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

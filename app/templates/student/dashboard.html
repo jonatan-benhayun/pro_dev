@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}דף תלמיד{% endblock %}
+
+{% block content %}
+<div class="container">
+
+  <h2 class="mb-4">שלום, {{ current_user.username or "תלמיד" }} 👋</h2>
+
+  <div class="grid" style="display:grid; gap:16px; grid-template-columns: repeat(auto-fit,minmax(280px,1fr));">
+    <!-- כרטיס: עריכת פרופיל -->
+    <div class="card">
+      <div class="card-body">
+        <h3 class="card-title">הפרופיל שלי</h3>
+        <p class="card-text">עדכון פרטים אישיים, דוא״ל, כיתה ועוד.</p>
+        <a class="btn btn-primary" href="{{ url_for('main.edit_profile') }}">עריכת פרופיל</a>
+      </div>
+    </div>
+
+    <!-- כרטיס: שיעורים קרובים -->
+    <div class="card">
+      <div class="card-body">
+        <h3 class="card-title">השיעורים הקרובים</h3>
+        {% if lessons %}
+          <ul class="list">
+            {% for l in lessons %}
+              <li>
+                {{ l.start_at.strftime("%d/%m/%Y %H:%M") }} — 
+                {{ ((l.end_at - l.start_at).total_seconds() // 60)|int }} דק׳
+                {% if l.status %}<span class="badge">{{ l.status }}</span>{% endif %}
+              </li>
+            {% endfor %}
+          </ul>
+          <div class="mt-2">
+            <a class="btn" href="{{ url_for('main.calendar_view') }}">ללוח השנה</a>
+          </div>
+        {% else %}
+          <p>אין שיעורים קרובים עדיין.</p>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- כרטיס: חומר לימודי -->
+
+    <div class="card">
+      <div class="card-body">
+        <h3 class="card-title">חומר לימודי</h3>
+        {% if materials %}
+          <ul class="list">
+            {% for m in materials %}
+              <li>
+                <strong>{{ m.title }}</strong>
+                <small class="text-muted" style="display:block">{{ m.created_at.strftime('%d/%m/%Y %H:%M') }}</small>
+              </li>
+            {% endfor %}
+          </ul>
+        {% else %}
+          <p>עוד לא הוקצו חומרים. כשתקבלו—הכל יופיע כאן.</p>
+        {% endif %}
+        <div class="mt-2">
+            <a class="btn" href="{{ url_for('student.materials') }}">לספריית החומרים</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+{% endblock %}

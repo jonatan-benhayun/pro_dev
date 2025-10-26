@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}עריכת פרופיל{% endblock %}
+
+{% block content %}
+<div class="container">
+  <h1>עריכת פרופיל</h1>
+
+  <section class="grid">
+    <!-- טופס עדכון פרופיל -->
+    <article class="card">
+      <h3>פרטים בסיסיים</h3>
+      <form method="post" action="{{ url_for('main.edit_profile') }}" class="form">
+        <input type="hidden" name="form_type" value="profile">
+
+        <label for="username">שם משתמש</label>
+        <input id="username" name="username" type="text" value="{{ user.username }}" required>
+
+        <label for="email">אימייל</label>
+        <input id="email" name="email" type="email" value="{{ user.email }}" required>
+
+        {% if user.role == 'student' %}
+        <label for="grade">כיתה</label>
+        <select id="grade" name="grade" required>
+          <option value="" disabled {{ 'selected' if not (request.form.get('grade') or (user and user.grade)) }}>בחר/י כיתה</option>
+          {% set chosen = (request.form.get('grade') or (user.grade if user is defined and user else ''))|int %}
+          {% for val, label in grades %}
+            <option value="{{ val }}" {{ 'selected' if val == chosen else '' }}>{{ label }}</option>
+          {% endfor %}
+        </select>
+
+        <label for="school">בית ספר</label>
+        <select id="school" name="school">
+          <option value="">ללא</option>
+          {% for s in schools %}
+            <option value="{{ s }}" {% if user.school == s %}selected{% endif %}>{{ s }}</option>
+          {% endfor %}
+        </select>
+        {% endif %}
+
+        <div class="card-actions">
+          <button class="btn btn-primary" type="submit">שמור שינויים</button>
+        </div>
+      </form>
+    </article>
+
+    <!-- טופס שינוי סיסמה -->
+    <article class="card">
+      <h3>שינוי סיסמה</h3>
+      <form method="post" action="{{ url_for('main.edit_profile') }}" class="form">
+        <input type="hidden" name="form_type" value="password">
+
+        <label for="current_password">סיסמה נוכחית</label>
+        <div class="password-field">
+          <input id="current_password" name="current_password" type="password" required>
+          <button type="button" class="toggle-password" data-target="#current_password" aria-label="הצג/הסתר">👁️</button>
+        </div>
+
+        <label for="new_password">סיסמה חדשה</label>
+        <div class="password-field">
+          <input id="new_password" name="new_password" type="password" minlength="6" required>
+          <button type="button" class="toggle-password" data-target="#new_password" aria-label="הצג/הסתר">👁️</button>
+        </div>
+
+        <label for="confirm_password">אישור סיסמה חדשה</label>
+        <div class="password-field">
+          <input id="confirm_password" name="confirm_password" type="password" minlength="6" required>
+          <button type="button" class="toggle-password" data-target="#confirm_password" aria-label="הצג/הסתר">👁️</button>
+        </div>
+
+        <div class="card-actions">
+          <button class="btn btn-danger" type="submit">עדכן סיסמה</button>
+        </div>
+      </form>
+    </article>
+  </section>
+</div>
+{% endblock %}

@@ -1,0 +1,109 @@
+﻿{% extends "base.html" %}
+{% block content %}
+<h1>סיכום השיעורים</h1>
+
+<form method="get" class="filter-bar" style="display:flex; gap:1rem; flex-wrap:wrap; align-items:flex-end; margin-bottom:1.5rem;">
+  <div class="form-control">
+    <label for="start_date" class="label">מתאריך -</label>
+    <input type="date" id="start_date" name="start_date" value="{{ filters.start_date }}" class="input">
+  </div>
+  <div class="form-control">
+    <label for="end_date" class="label">ועד -</label>
+    <input type="date" id="end_date" name="end_date" value="{{ filters.end_date }}" class="input">
+  </div>
+  <div class="form-control">
+    <label for="student_id" class="label">תלמיד -</label>
+    <select id="student_id" name="student_id" class="select">
+      <option value="">כל התלמידים</option>
+      {% for s in students %}
+        <option value="{{ s.id }}" {% if filters.student_id == s.id %}selected{% endif %}>
+          {{ s.username }} {% if s.grade %}- {{ grade_label(s.grade) }}{% endif %}
+
+        </option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="form-control">
+    <label for="paid_status" class="label">סטטוס תשלום</label>
+    <select id="paid_status" name="paid_status" class="select">
+      <option value="">כל הסטטוסים</option>
+      <option value="paid" {% if filters.paid_status == 'paid' %}selected{% endif %}>שולם</option>
+      <option value="partial" {% if filters.paid_status == 'partial' %}selected{% endif %}>שולם חלקית</option>
+      <option value="unpaid" {% if filters.paid_status == 'unpaid' %}selected{% endif %}>לא שולם</option>
+    </select>
+  </div>
+  <div class="form-control">
+    <label for="payment_method" class="label">אופן תשלום</label>
+    <select id="payment_method" name="payment_method" class="select">
+      <option value="">לא מסונן</option>
+      {% for value, label in payment_methods %}
+        <option value="{{ value }}" {% if filters.payment_method == value %}selected{% endif %}>
+          {{ label }}
+        </option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="form-actions" style="display:flex; gap:0.5rem;">
+    <button type="submit" class="btn btn-primary">סנן</button>
+    <button type="submit" name="export" value="pdf" class="btn btn-outline">הורד PDF</button>
+    <a class="btn btn-outline" href="{{ url_for('teacher.lessons_completed') }}">אפס</a>
+  </div>
+</form>
+
+<section class="summary" style="display:flex; gap:1.5rem; flex-wrap:wrap; margin-bottom:1.5rem;">
+  <div>ס"כ שיעורים: {{ lessons | length }}</div>
+  <div>ס"כ זמן (שעות): {{ total_hours|round(2) }}</div>
+  <div>ס"כ ההכנסות ₪{{ total_cost|round(2) }}</div>
+
+</section>
+<table class="table">
+  <thead>
+    <tr>
+      <th>תאריך</th>
+      <th>שעה</th>
+      <th>תלמיד</th>
+      <th>משך זמן (דקות)</th>
+      <th>תעריף</th>
+      <th>סטטוס תשלום</th>
+      <th>אופן תשלום</th>
+    </tr>
+  </thead>
+
+  <tbody>
+  {% for lesson in lessons %}
+    <tr>
+      <td>{{ lesson.start_at and lesson.start_at.strftime('%d/%m/%Y') or '' }}</td>
+
+      <td>
+        {% if lesson.start_at %}{{ lesson.start_at.strftime('%H:%M') }}{% endif %}
+        -
+        {% if lesson.end_at %}{{ lesson.end_at.strftime('%H:%M') }}{% endif %}
+      </td>
+
+      <td>{{ lesson.student and lesson.student.username or '' }}</td>
+      <td>{{ lesson.duration_minutes or '' }}</td>
+
+      <td>₪{{ (lesson.hourly_rate_at_time or 0) | float | round(2) }}</td>
+
+      <td>{{ 'שולם' if lesson.paid_status == 'paid' else 'לא שולם' }}</td>
+
+      <td>
+        <form method="post" action="{{ url_for('teacher.set_payment_method', lesson_id=lesson.id) }}">
+          <select name="payment_method" onchange="this.form.submit()">
+            {% for value, label in payment_methods %}
+              <option value="{{ value }}" {{ 'selected' if (lesson.payment_method or '') == value else '' }}>
+                {{ label }}
+              </option>
+            {% endfor %}
+          </select>
+          {% if csrf_token %}{{ csrf_token() }}{% endif %}
+        </form>
+      </td>
+    </tr>
+  {% else %}
+    <tr><td colspan="7">אין שיעורים שהושלמו לסינונים שנבחרו</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}
+

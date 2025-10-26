@@ -1,0 +1,40 @@
+# === Python ===
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg-info/
+dist/
+build/
+
+# === Virtual envs ===
+.venv/
+venv/
+.venv_old/
+
+# === IDE/Editor ===
+.vscode/
+.idea/
+
+# === Logs & dumps ===
+*.log
+
+# === Docker / DB ===
+pgdata/
+*.pid
+
+# === Env & secrets ===
+.env
+.env.local
+.env.*.local
+
+# === Migrations caches (נשאיר את קבצי המיגרציות עצמם) ===
+migrations/**/__pycache__/
+
+# === Node (אם תוסיף פרונטנד) ===
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnp.*

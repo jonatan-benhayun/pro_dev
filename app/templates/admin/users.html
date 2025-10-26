@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>ניהול משתמשים</h1>
+
+<form method="get" class="form-inline" style="margin-bottom:1rem">
+  <input class="form-control" type="text" name="q" value="{{ q or '' }}" placeholder="חיפוש לפי שם/אימייל">
+  <button class="btn btn-primary">חפש</button>
+</form>
+
+<table class="table">
+  <thead>
+    <tr><th>#</th><th>שם</th><th>אימייל</th><th>תפקיד</th><th>כיתה</th><th>מורה</th><th>פעולות</th></tr>
+  </thead>
+  <tbody>
+    {% for u in users %}
+    <tr>
+      <td>{{ u.id }}</td>
+      <td>{{ u.username }}</td>
+      <td>{{ u.email }}</td>
+      <td>{{ u.role }}</td>
+      <td>{{ u.grade or '-' }}</td>
+      <td>{% if u.teacher %}
+            {{ u.teacher.username }}
+          {% else %}
+            -
+          {% endif %}</td>
+      <td>
+        <form method="post" action="{{ url_for('admin.set_role', user_id=u.id) }}" style="display:inline">
+          {{ csrf_token() if csrf_token else '' }}
+          <input type="hidden" name="role" value="student">
+          <button class="btn btn-sm">תלמיד</button>
+        </form>
+        <form method="post" action="{{ url_for('admin.set_role', user_id=u.id) }}" style="display:inline">
+          {{ csrf_token() if csrf_token else '' }}
+          <input type="hidden" name="role" value="teacher">
+          <button class="btn btn-sm btn-warning">מורה</button>
+        </form>
+        <form method="post" action="{{ url_for('admin.set_role', user_id=u.id) }}" style="display:inline">
+          {{ csrf_token() if csrf_token else '' }}
+          <input type="hidden" name="role" value="admin">
+          <button class="btn btn-sm btn-danger">אדמין</button>
+        </form>
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="7">אין משתמשים</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}
