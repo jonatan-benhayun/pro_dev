@@ -6,7 +6,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      test: ["CMD-SHELL","pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
       timeout: 3s
       retries: 30
@@ -20,23 +20,21 @@ services:
       dockerfile: Dockerfile.backend
     working_dir: /app
     environment:
-      FLASK_DEBUG: "1"
-      FLASK_APP: wsgi.py
       DATABASE_URL: ${DATABASE_URL}
       SECRET_KEY: ${SECRET_KEY}
       FLASK_ENV: ${FLASK_ENV}
-      DB_INIT_RETRIES: ${DB_INIT_RETRIES}
-      DB_INIT_DELAY: ${DB_INIT_DELAY}
-    command: ["python","-m","flask","run","--host=0.0.0.0","--port=8000"]
+    # מריץ gunicorn (זהה ל-CMD שבתמונה; משאירים כאן לנראות)
+    command: ["gunicorn","-w","2","-b","0.0.0.0:8000","wsgi:app"]
     depends_on:
       db:
         condition: service_healthy
     ports:
       - "8000:8000"
+    # במקומי: נוח להשאיר mount. ב-CI גם עובד.
     volumes:
       - ./:/app
     healthcheck:
-      test: ["CMD-SHELL", "python -c 'import urllib.request,sys; urllib.request.urlopen(\"http://localhost:8000/api/ping\", timeout=2); sys.exit(0)' || exit 1"]
+      test: ["CMD-SHELL","python -c 'import urllib.request,sys; urllib.request.urlopen(\"http://localhost:8000/api/ping\", timeout=3); sys.exit(0)' || exit 1"]
       interval: 5s
       timeout: 3s
       retries: 60
