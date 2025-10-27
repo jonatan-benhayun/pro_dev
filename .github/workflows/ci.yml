@@ -9,19 +9,20 @@ jobs:
   build-and-test:
     runs-on: ubuntu-latest
     env:
+      # ===== App/DB env =====
       POSTGRES_DB: appdb
       POSTGRES_USER: appuser
       POSTGRES_PASSWORD: appsecret
       DATABASE_URL: postgresql+psycopg2://appuser:appsecret@db:5432/appdb
-      NGINX_HOST_PORT: 8080   # CI על 8080
+
+      # ===== Test params =====
+      NGINX_HOST_PORT: 8080
       BACKEND_CHECK_PATH: "/api/ping"
-      EXPECT_PATTERN1: '"status"\\s*:\\s*"ok"'
-      EXPECT_PATTERN2: '"db"\\s*:\\s*"connected"'
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Create CI compose override (8080->80)
+      - name: Create CI compose override (map 8080->80)
         run: |
           cat > ci.compose.override.yml << 'EOF'
           services:
@@ -49,25 +50,48 @@ jobs:
       - name: Run E2E smoke test (nginx -> backend -> postgres)
         run: bash tests/smoke_test.sh
 
-      - name: Diagnostics on failure
+      # ------- failure handling: collect logs, email, artifact -------
+      - name: Collect diagnostics (compose logs -> file)
         if: failure()
         shell: bash
         run: |
           set +e
-          echo "=== docker ps ==="
-          docker ps -a
-          echo "=== compose ps ==="
-          docker compose -f docker-compose.yml -f ci.compose.override.yml ps
-          echo "=== LAST 200 LOG LINES: backend ==="
-          docker compose -f docker-compose.yml -f ci.compose.override.yml logs --tail=200 backend
-          echo "=== LAST 200 LOG LINES: nginx ==="
-          docker compose -f docker-compose.yml -f ci.compose.override.yml logs --tail=200 nginx
-          echo "=== LAST 200 LOG LINES: db ==="
-          docker compose -f docker-compose.yml -f ci.compose.override.yml logs --tail=200 db
-          echo "=== CURL backend directly (bypass nginx) ==="
-          curl -v http://localhost:8000/api/ping || true
-          # save full logs to file
-          docker compose -f docker-compose.yml -f ci.compose.override.yml logs > compose-logs.txt || true
+          echo "=== docker ps ===" > compose-logs.txt
+          docker ps -a >> compose-logs.txt 2>&1
+          echo -e "\n=== compose ps ===" >> compose-logs.txt
+          docker compose -f docker-compose.yml -f ci.compose.override.yml ps >> compose-logs.txt 2>&1
+          echo -e "\n=== backend logs (last 400) ===" >> compose-logs.txt
+          docker compose -f docker-compose.yml -f ci.compose.override.yml logs --tail=400 backend >> compose-logs.txt 2>&1
+          echo -e "\n=== nginx logs (last 200) ===" >> compose-logs.txt
+          docker compose -f docker-compose.yml -f ci.compose.override.yml logs --tail=200 nginx >> compose-logs.txt 2>&1
+          echo -e "\n=== db logs (last 200) ===" >> compose-logs.txt
+          docker compose -f docker-compose.yml -f ci.compose.override.yml logs --tail=200 db >> compose-logs.txt 2>&1
+          # Trim to ~1MB to keep email happy
+          tail -c 1000000 compose-logs.txt > compose-logs.trim.txt || true
+
+      - name: Email me on failure (with logs)
+        if: failure()
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: ${{ secrets.SMTP_HOST }}
+          server_port: ${{ secrets.SMTP_PORT }}
+          username: ${{ secrets.SMTP_USERNAME }}
+          password: ${{ secrets.SMTP_PASSWORD }}
+          to: ${{ secrets.MAIL_TO }}
+          from: ${{ secrets.MAIL_FROM }}
+          secure: true
+          convert_markdown: true
+          subject: "[CI FAILED] ${{ github.repository }} #${{ github.run_number }} on ${{ github.ref_name }}"
+          body: |
+            ❌ CI failed for **${{ github.repository }}** (run #${{ github.run_number }})
+
+            **Branch:** ${{ github.ref_name }}
+            **Commit:** ${{ github.sha }}
+            **Actor:** ${{ github.actor }}
+            **Run URL:** ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+            Logs file attached (trimmed to ~1MB).
+          attachments: compose-logs.trim.txt
 
       - name: Upload logs artifact
         if: failure()
@@ -76,6 +100,9 @@ jobs:
           name: compose-logs
           path: compose-logs.txt
 
+      # --------------------------------------------------------------
+
       - name: Compose Down
         if: always()
         run: docker compose -f docker-compose.yml -f ci.compose.override.yml down -v
+
