@@ -9,13 +9,12 @@ jobs:
   build-and-test:
     runs-on: ubuntu-latest
     env:
-      # ===== App/DB env =====
       POSTGRES_DB: appdb
       POSTGRES_USER: appuser
       POSTGRES_PASSWORD: appsecret
       DATABASE_URL: postgresql+psycopg2://appuser:appsecret@db:5432/appdb
 
-      # ===== Test params =====
+      # Nginx on 8080 in CI (override file maps 8080->80)
       NGINX_HOST_PORT: 8080
       BACKEND_CHECK_PATH: "/api/ping"
 
@@ -50,7 +49,7 @@ jobs:
       - name: Run E2E smoke test (nginx -> backend -> postgres)
         run: bash tests/smoke_test.sh
 
-      # ------- failure handling: collect logs, email, artifact -------
+      # ---- only on failure: collect logs + email + artifact ----
       - name: Collect diagnostics (compose logs -> file)
         if: failure()
         shell: bash
@@ -66,7 +65,6 @@ jobs:
           docker compose -f docker-compose.yml -f ci.compose.override.yml logs --tail=200 nginx >> compose-logs.txt 2>&1
           echo -e "\n=== db logs (last 200) ===" >> compose-logs.txt
           docker compose -f docker-compose.yml -f ci.compose.override.yml logs --tail=200 db >> compose-logs.txt 2>&1
-          # Trim to ~1MB to keep email happy
           tail -c 1000000 compose-logs.txt > compose-logs.trim.txt || true
 
       - name: Email me on failure (with logs)
@@ -99,10 +97,8 @@ jobs:
         with:
           name: compose-logs
           path: compose-logs.txt
-
-      # --------------------------------------------------------------
+      # ----------------------------------------------------------
 
       - name: Compose Down
         if: always()
         run: docker compose -f docker-compose.yml -f ci.compose.override.yml down -v
-
