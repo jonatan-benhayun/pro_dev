@@ -116,7 +116,7 @@ jobs:
         matrix:
           service:
             - { name: backend,  dockerfile: ./Dockerfile.backend, context: . }
-            - { name: frontend, dockerfile: ./nginx/Dockerfile,  context: . }
+            - { name: frontend, dockerfile: ./nginx/Dockerfile,  context: ./nginx }
 
       steps:
         - name: Checkout same commit
