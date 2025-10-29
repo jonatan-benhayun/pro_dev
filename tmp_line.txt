@@ -1,1 +1,0 @@
-    y = _draw_wrapped_lines(pdf, f"????? ?????: {paid_label}", x_right, y, body_font, leading_body, content_width)
