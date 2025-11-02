@@ -28,7 +28,7 @@ services:
     depends_on:
       db:
         condition: service_healthy
-    ports:
+    expose:
       - "8000"
     # במקומי: נוח להשאיר mount. ב-CI גם עובד.
     volumes:

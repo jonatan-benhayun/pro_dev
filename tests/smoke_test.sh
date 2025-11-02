@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-PORT="${NGINX_HOST_PORT:-80}"
+PORT="${NGINX_HOST_PORT:-8000}"
 PATH_TO_CHECK="${BACKEND_CHECK_PATH:-/api/ping}"
 BASE="http://localhost:${PORT}"
 
@@ -25,7 +25,7 @@ RESP="$(curl -fsS "${BASE}${PATH_TO_CHECK}")"
 echo "Response: ${RESP}"
 
 # אימות JSON: status == ok AND db == connected (בלי תלות בסדר/רווחים)
-python - << 'PY' "${RESP}"
+python3 - << 'PY' "${RESP}"
 import sys, json
 raw = sys.argv[1]
 try:
