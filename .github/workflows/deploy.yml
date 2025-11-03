@@ -18,7 +18,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Build image
-        run: docker build -t $IMAGE_NAME:${{ github.sha }} .
+        run: docker build -t $IMAGE_NAME:${{ github.sha }} -f Dockerfile.backend .
 
       - name: Login to Docker Hub
         run: echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
