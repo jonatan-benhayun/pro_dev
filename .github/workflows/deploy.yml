@@ -1,0 +1,121 @@
+name: CI-CD BlueGreen EC2
+on:
+  push:
+    branches: [ "main" ]
+
+env:
+  IMAGE_NAME: ${{ secrets.IMAGE_NAME || 'jonatan0897/myapp' }}
+  AWS_REGION: ${{ secrets.AWS_REGION }}
+
+jobs:
+  build_and_push:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build image
+        run: docker build -t $IMAGE_NAME:${{ github.sha }} .
+
+      - name: Login to Docker Hub
+        run: echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
+
+      - name: Push image (sha + latest)
+        run: |
+          docker tag $IMAGE_NAME:${{ github.sha }} $IMAGE_NAME:latest
+          docker push $IMAGE_NAME:${{ github.sha }}
+          docker push $IMAGE_NAME:latest
+
+  deploy:
+    needs: build_and_push
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Prepare user-data (inject env)
+        run: |
+          mkdir -p out
+          {
+            echo "export IMAGE_NAME=${{ env.IMAGE_NAME }}"
+            echo "export IMAGE_TAG=${{ github.sha }}"
+            echo "export APP_PORT=${{ secrets.APP_PORT || 80 }}"
+            echo "export DOCKERHUB_USERNAME=${{ secrets.DOCKERHUB_USERNAME }}"
+            echo "export DOCKERHUB_TOKEN=${{ secrets.DOCKERHUB_TOKEN }}"
+            echo ""
+            cat deploy/user_data.sh
+          } > out/final_user_data.sh
+          chmod +x out/final_user_data.sh
+
+      - name: Launch new EC2 (Ubuntu 22.04 LTS)
+        id: launch
+        run: |
+          # Canonical owner for Ubuntu images: 099720109477
+          AMI_ID=$(aws ec2 describe-images \
+            --owners 099720109477 \
+            --filters "Name=name,Values=ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-*" "Name=state,Values=available" \
+            --query 'Images|sort_by(@,&CreationDate)[-1].ImageId' --output text)
+          echo "Using AMI: $AMI_ID"
+
+          INSTANCE_ID=$(aws ec2 run-instances \
+            --image-id "$AMI_ID" \
+            --instance-type t3.micro \
+            --iam-instance-profile Name="${{ secrets.EC2_INSTANCE_PROFILE }}" \
+            --security-group-ids "${{ secrets.EC2_SECURITY_GROUP_ID }}" \
+            --user-data file://out/final_user_data.sh \
+            --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=myapp-bluegreen},{Key=Stack,Value=myapp},{Key=Version,Value=${{ github.sha }}}]' \
+            --query 'Instances[0].InstanceId' --output text)
+
+          echo "INSTANCE_ID=$INSTANCE_ID" >> $GITHUB_OUTPUT
+          echo "New instance: $INSTANCE_ID"
+          aws ec2 wait instance-status-ok --instance-ids "$INSTANCE_ID"
+
+      - name: Get new instance public IP
+        id: ip
+        run: |
+          IP=$(aws ec2 describe-instances --instance-ids "${{ steps.launch.outputs.INSTANCE_ID }}" \
+              --query 'Reservations[0].Instances[0].PublicIpAddress' --output text)
+          echo "IP=$IP" >> $GITHUB_OUTPUT
+          echo "New IP: $IP"
+
+      - name: Health check (http://IP/healthz)
+        run: |
+          for i in {1..30}; do
+            sleep 5
+            if curl -fsS "http://${{ steps.ip.outputs.IP }}/healthz" >/dev/null; then
+              echo "Health OK"
+              exit 0
+            fi
+          done
+          echo "Health check failed"
+          exit 1
+
+      - name: Switch Elastic IP to new instance
+        run: |
+          ASSOC_ID=$(aws ec2 describe-addresses --allocation-ids "${{ secrets.EIP_ALLOCATION_ID }}" --query 'Addresses[0].AssociationId' --output text)
+          if [ "$ASSOC_ID" != "None" ]; then
+            aws ec2 disassociate-address --association-id "$ASSOC_ID"
+          fi
+          aws ec2 associate-address --allocation-id "${{ secrets.EIP_ALLOCATION_ID }}" --instance-id "${{ steps.launch.outputs.INSTANCE_ID }}"
+          echo "EIP associated."
+
+      - name: Terminate old instances (keep only the new one)
+        run: |
+          NEW="${{ steps.launch.outputs.INSTANCE_ID }}"
+          OLD=$(aws ec2 describe-instances \
+            --filters "Name=tag:Stack,Values=myapp" "Name=instance-state-name,Values=running" \
+            --query "Reservations[].Instances[?InstanceId!='${NEW}'].InstanceId" --output text)
+          if [ -n "$OLD" ]; then
+            echo "Terminating: $OLD"
+            aws ec2 terminate-instances --instance-ids $OLD
+          else
+            echo "No old instances."
+          fi
