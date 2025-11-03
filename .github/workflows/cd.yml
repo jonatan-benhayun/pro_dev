@@ -1,0 +1,55 @@
+name: CD - Deploy to EC2
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: us-east-1
+
+      # 1) מעלים את קבצי הדיפלוי אל ה-EC2 (דרך SSM)
+      - name: Upload deploy files to EC2 via SSM
+        run: |
+          to_b64() { base64 -w0 "$1"; }
+          DC_B64=$(to_b64 deploy/compose/docker-compose.prod.yml)
+          NG_B64=$(to_b64 deploy/nginx/site.conf)
+          SH_B64=$(to_b64 deploy/ec2_deploy.sh)
+
+          aws ssm send-command \
+            --instance-ids "${{ secrets.EC2_INSTANCE_ID }}" \
+            --document-name "AWS-RunShellScript" \
+            --comment "Upload compose/nginx/script" \
+            --parameters commands="[
+              \"sudo mkdir -p /opt/app/compose /opt/app/nginx /opt/app/deploy\",
+              \"echo $DC_B64 | base64 -d | sudo tee /opt/app/compose/docker-compose.prod.yml > /dev/null\",
+              \"echo $NG_B64 | base64 -d | sudo tee /opt/app/nginx/site.conf > /dev/null\",
+              \"echo $SH_B64 | base64 -d | sudo tee /opt/app/deploy/ec2_deploy.sh > /dev/null\",
+              \"sudo chmod +x /opt/app/deploy/ec2_deploy.sh\"
+            ]" \
+            --query "Command.CommandId" --output text \
+          | xargs -I {} aws ssm wait command-executed --command-id {} --instance-id "${{ secrets.EC2_INSTANCE_ID }}"
+
+      # 2) מריצים את סקריפט הדיפלוי בשרת
+      - name: Run deploy script via SSM
+        run: |
+          CMD_ID=$(aws ssm send-command \
+            --instance-ids "${{ secrets.EC2_INSTANCE_ID }}" \
+            --document-name "AWS-RunShellScript" \
+            --comment "Run deploy" \
+            --parameters commands="/opt/app/deploy/ec2_deploy.sh" \
+            --query "Command.CommandId" --output text)
+
+          aws ssm wait command-executed --command-id "$CMD_ID" --instance-id "${{ secrets.EC2_INSTANCE_ID }}"
+          aws ssm get-command-invocation --command-id "$CMD_ID" --instance-id "${{ secrets.EC2_INSTANCE_ID }}"
