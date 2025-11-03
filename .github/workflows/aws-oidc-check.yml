@@ -1,0 +1,27 @@
+name: AWS OIDC Check
+
+on:
+  workflow_dispatch: {}   # מאפשר להריץ ידנית מהטאב Actions
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write   # חובה ל-OIDC
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Who am I?
+        run: aws sts get-caller-identity
+
+      - name: Region check
+        run: aws ec2 describe-availability-zones --query 'AvailabilityZones[].ZoneName'
