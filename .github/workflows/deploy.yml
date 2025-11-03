@@ -17,6 +17,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Sanity – Dockerfile exists
+        run: |
+          ls -la
+          test -f Dockerfile.backend
+
       - name: Build image
         run: docker build -t $IMAGE_NAME:${{ github.sha }} -f Dockerfile.backend .
 
