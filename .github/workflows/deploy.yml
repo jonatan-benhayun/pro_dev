@@ -120,6 +120,7 @@ jobs:
       - name: Health check (http://IP/healthz)
         shell: bash
         run: |
+          set -e
           for i in {1..40}; do
             if curl -fsS "http://${{ steps.ip.outputs.IP }}:80/healthz" >/dev/null; then
               echo "Health OK"
@@ -141,8 +142,9 @@ jobs:
       - name: Debug: EC2 console output (last 200 lines)
         if: failure()
         run: |
-          aws ec2 get-console-output --instance-id "${{ steps.launch.outputs.INSTANCE_ID }}" --latest --output text | tail -n 200
-
+          aws ec2 get-console-output --instance-id "${{ steps.launch.outputs.INSTANCE_ID }}" \
+            --latest --output text | tail -n 200
+ 
       - name: Switch Elastic IP to new instance
         run: |
           ASSOC_ID=$(aws ec2 describe-addresses --allocation-ids "${{ secrets.EIP_ALLOCATION_ID }}" --query 'Addresses[0].AssociationId' --output text)
