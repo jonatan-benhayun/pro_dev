@@ -117,19 +117,20 @@ jobs:
           echo "IP=$IP" >> $GITHUB_OUTPUT
           echo "New IP: $IP"
 
-      - name: Health check (http://IP:80/healthz)
+      - name: Health check (http://IP/healthz)
+        shell: bash
         run: |
-          set -e
-          for i in {1..60}; do   # עד ~10 דקות (60*10s)
-            sleep 10
-            if curl -fsS --max-time 3 "http://${{ steps.ip.outputs.IP }}:80/healthz" >/dev/null; then
+          for i in {1..40}; do
+            if curl -fsS "http://${{ steps.ip.outputs.IP }}:80/healthz" >/dev/null; then
               echo "Health OK"
               exit 0
             fi
-            echo "Attempt $i: not up yet..."
+            echo "waiting $i/40..."
+            sleep 5
           done
           echo "Health check failed"
           exit 1
+
 
       - name: Debug: show SG rules
         if: failure()
