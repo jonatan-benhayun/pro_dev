@@ -122,15 +122,13 @@ jobs:
         run: |
           set -e
           for i in {1..40}; do
-            if curl -fsS "http://${{ steps.ip.outputs.IP }}:80/healthz" >/dev/null; then
-              echo "Health OK"
-              exit 0
+            if curl -fsS --connect-timeout 2 --max-time 3 "http://${{ steps.ip.outputs.IP }}:80/healthz" >/dev/null; then
+              echo "Health OK"; exit 0
             fi
             echo "waiting $i/40..."
             sleep 5
           done
-          echo "Health check failed"
-          exit 1
+          echo "Health check failed"; exit 1
 
       - name: "Debug: show SG rules"
         if: failure()
