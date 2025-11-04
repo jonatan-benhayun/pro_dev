@@ -136,11 +136,11 @@ jobs:
         if: failure()
         run: |
           aws ec2 describe-security-groups \
-          --group-ids "${{ secrets.EC2_SECURITY_GROUP_ID}}" \
-          --query 'SecurityGroups.IpPermissions'-output table
+            --group-ids "${{ secrets.EC2_SECURITY_GROUP_ID }}" \
+            --query 'SecurityGroups[0].IpPermissions[].{Proto:IpProtocol,From:FromPort,To:ToPort,CIDRs:IpRanges[].CidrIp}' \
+            --output table
 
-
-      - name: "Debug: EC2 console output (last 200 lines)"
+        - name: "Debug: EC2 console output (last 200 lines)"
         if: failure()
         run: |
           aws ec2 get-console-output --instance-id "${{ steps.launch.outputs.INSTANCE_ID }}" \
