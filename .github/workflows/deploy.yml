@@ -131,7 +131,6 @@ jobs:
           done
           echo "Health check failed"
           exit 1
-
       - name: Debug: show SG rules
         if: failure()
         run: |
@@ -144,7 +143,7 @@ jobs:
         run: |
           aws ec2 get-console-output --instance-id "${{ steps.launch.outputs.INSTANCE_ID }}" \
             --latest --output text | tail -n 200
- 
+
       - name: Switch Elastic IP to new instance
         run: |
           ASSOC_ID=$(aws ec2 describe-addresses --allocation-ids "${{ secrets.EIP_ALLOCATION_ID }}" --query 'Addresses[0].AssociationId' --output text)
