@@ -128,7 +128,8 @@ jobs:
             echo "waiting $i/40..."
             sleep 5
           done
-          echo "Health check failed"; exit 1
+          echo "Health check failed"
+          exit 1
 
       - name: "Debug: show SG rules"
         if: failure()
