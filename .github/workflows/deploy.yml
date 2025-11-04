@@ -1,4 +1,5 @@
 name: CI-CD BlueGreen EC2
+
 on:
   push:
     branches: [ "main" ]
@@ -7,22 +8,11 @@ permissions:
   id-token: write
   contents: read
 
-env:
-  IMAGE_NAME: ${{ secrets.IMAGE_NAME }}
-  AWS_REGION: ${{ secrets.AWS_REGION }}
-
 jobs:
   build_and_push:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      - name: Login to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
 
       - name: Sanity – Dockerfile exists
         run: |
@@ -40,7 +30,7 @@ jobs:
           NAME='${{ secrets.IMAGE_NAME }}'
           test -n "$NAME" || (echo "Missing IMAGE_NAME secret" && exit 1)
           echo "$NAME" | grep -Eq '^[a-z0-9]+([._-][a-z0-9]+)*/[a-z0-9]+([._-][a-z0-9]+)*$' \
-            || (echo "Bad IMAGE_NAME format: must be like user/repo (lowercase)"; exit 1)
+            || (echo "Bad IMAGE_NAME format: user/repo (lowercase)"; exit 1)
 
       - name: Build and push (backend)
         uses: docker/build-push-action@v6
@@ -52,23 +42,20 @@ jobs:
             ${{ secrets.IMAGE_NAME }}:${{ github.sha }}
             ${{ secrets.IMAGE_NAME }}:latest
 
-
-
-
-deploy:
+  deploy:
     needs: build_and_push
     runs-on: ubuntu-latest
     permissions:
       id-token: write
       contents: read
-
     steps:
       - uses: actions/checkout@v4
 
-      - name: Sanity – secrets present
+      - name: Sanity – required secrets
         run: |
-          test -n "${{ secrets.AWS_ROLE_ARN }}" || (echo "Missing AWS_ROLE_ARN" && exit 1)
-          test -n "${{ secrets.AWS_REGION }}"   || (echo "Missing AWS_REGION" && exit 1)
+          for k in AWS_ROLE_ARN AWS_REGION EC2_SECURITY_GROUP_ID EC2_INSTANCE_PROFILE EIP_ALLOCATION_ID; do
+            test -n "${{ secrets.$$k }}" || { echo "Missing secret: $k"; exit 1; }
+          done
 
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
@@ -80,20 +67,19 @@ deploy:
         run: |
           mkdir -p out
           {
-            echo "export IMAGE_NAME=${{ env.IMAGE_NAME }}"
+            echo "export IMAGE_NAME=${{ secrets.IMAGE_NAME }}"
             echo "export IMAGE_TAG=${{ github.sha }}"
             echo "export APP_PORT=${{ secrets.APP_PORT != '' && secrets.APP_PORT || '8000' }}"
             echo "export DOCKERHUB_USERNAME=${{ secrets.DOCKERHUB_USERNAME }}"
             echo "export DOCKERHUB_TOKEN=${{ secrets.DOCKERHUB_TOKEN }}"
-            echo ""
+            echo
             cat deploy/user_data.sh
           } > out/final_user_data.sh
           chmod +x out/final_user_data.sh
 
-      - name: Launch new EC2 (Ubuntu 22.04 LTS)
+      - name: Launch new EC2 (Ubuntu 22.04)
         id: launch
         run: |
-          # Canonical owner for Ubuntu images: 099720109477
           AMI_ID=$(aws ec2 describe-images \
             --owners 099720109477 \
             --filters "Name=name,Values=ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-*" "Name=state,Values=available" \
@@ -117,7 +103,7 @@ deploy:
         id: ip
         run: |
           IP=$(aws ec2 describe-instances --instance-ids "${{ steps.launch.outputs.INSTANCE_ID }}" \
-              --query 'Reservations[0].Instances[0].PublicIpAddress' --output text)
+               --query 'Reservations[0].Instances[0].PublicIpAddress' --output text)
           echo "IP=$IP" >> $GITHUB_OUTPUT
           echo "New IP: $IP"
 
@@ -149,8 +135,8 @@ deploy:
             --filters "Name=tag:Stack,Values=myapp" "Name=instance-state-name,Values=running" \
             --query "Reservations[].Instances[?InstanceId!='${NEW}'].InstanceId" --output text)
           if [ -n "$OLD" ]; then
-            echo "Terminating: $OLD"
             aws ec2 terminate-instances --instance-ids $OLD
+            echo "Terminated: $OLD"
           else
             echo "No old instances."
           fi
