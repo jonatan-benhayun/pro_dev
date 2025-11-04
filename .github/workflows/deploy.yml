@@ -53,14 +53,14 @@ jobs:
 
       - name: Sanity – required secrets
         env:
-          AWS_ROLE_ARN:         ${{ secrets.AWS_ROLE_ARN }}
-          AWS_REGION:           ${{ secrets.AWS_REGION }}
-          EC2_SECURITY_GROUP_ID:${{ secrets.EC2_SECURITY_GROUP_ID }}
-          EC2_INSTANCE_PROFILE: ${{ secrets.EC2_INSTANCE_PROFILE }}
-          EIP_ALLOCATION_ID:    ${{ secrets.EIP_ALLOCATION_ID }}
-          IMAGE_NAME:           ${{ secrets.IMAGE_NAME }}
-          DOCKERHUB_USERNAME:   ${{ secrets.DOCKERHUB_USERNAME }}
-          DOCKERHUB_TOKEN:      ${{ secrets.DOCKERHUB_TOKEN }}
+          AWS_ROLE_ARN:           ${{ secrets.AWS_ROLE_ARN }}
+          AWS_REGION:             ${{ secrets.AWS_REGION }}
+          EC2_SECURITY_GROUP_ID:  ${{ secrets.EC2_SECURITY_GROUP_ID }}
+          EC2_INSTANCE_PROFILE:   ${{ secrets.EC2_INSTANCE_PROFILE }}
+          EIP_ALLOCATION_ID:      ${{ secrets.EIP_ALLOCATION_ID }}
+          IMAGE_NAME:             ${{ secrets.IMAGE_NAME }}
+          DOCKERHUB_USERNAME:     ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN:        ${{ secrets.DOCKERHUB_TOKEN }}
         run: |
           for v in AWS_ROLE_ARN AWS_REGION EC2_SECURITY_GROUP_ID EC2_INSTANCE_PROFILE EIP_ALLOCATION_ID IMAGE_NAME DOCKERHUB_USERNAME DOCKERHUB_TOKEN; do
             eval "val=\${$v}"
