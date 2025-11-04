@@ -140,7 +140,7 @@ jobs:
           --query 'SecurityGroups.IpPermissions'-output table
 
 
-      - name: Debug: EC2 console output (last 200 lines)
+      - name: "Debug: EC2 console output (last 200 lines)"
         if: failure()
         run: |
           aws ec2 get-console-output --instance-id "${{ steps.launch.outputs.INSTANCE_ID }}" \
