@@ -131,12 +131,14 @@ jobs:
           done
           echo "Health check failed"
           exit 1
+
       - name: Debug: show SG rules
         if: failure()
         run: |
           aws ec2 describe-security-groups \
-            --group-ids "${{ secrets.EC2_SECURITY_GROUP_ID }}" \
-            --query 'SecurityGroups[0].IpPermissions' --output table
+          --group-ids "${{ secrets.EC2_SECURITY_GROUP_ID}}" \
+          --query 'SecurityGroups.IpPermissions'-output table
+
 
       - name: Debug: EC2 console output (last 200 lines)
         if: failure()
