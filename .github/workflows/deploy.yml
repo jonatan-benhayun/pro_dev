@@ -119,15 +119,29 @@ jobs:
 
       - name: Health check (http://IP/healthz)
         run: |
-          for i in {1..30}; do
-            sleep 5
-            if curl -fsS "http://${{ steps.ip.outputs.IP }}/healthz" >/dev/null; then
+          set -e
+          for i in {1..60}; do   # עד ~10 דקות (60*10s)
+            sleep 10
+            if curl -fsS --max-time 3 "http://${{ steps.ip.outputs.IP }}/healthz" >/dev/null; then
               echo "Health OK"
               exit 0
             fi
+            echo "Attempt $i: not up yet..."
           done
           echo "Health check failed"
           exit 1
+
+      - name: Debug: show SG rules
+        if: failure()
+        run: |
+          aws ec2 describe-security-groups \
+            --group-ids "${{ secrets.EC2_SECURITY_GROUP_ID }}" \
+            --query 'SecurityGroups[0].IpPermissions' --output table
+
+      - name: Debug: EC2 console output (last 200 lines)
+        if: failure()
+        run: |
+          aws ec2 get-console-output --instance-id "${{ steps.launch.outputs.INSTANCE_ID }}" --latest --output text | tail -n 200
 
       - name: Switch Elastic IP to new instance
         run: |

@@ -1,23 +1,36 @@
 #!/bin/bash
 set -euxo pipefail
 
-# הערכים יוזרקו ע"י ה-Workflow
-IMAGE_NAME="${IMAGE_NAME:-jonatan0897/myapp}"
+# =========================
+# קונפיג מה-Workflow (secrets)
+# =========================
+IMAGE_NAME="${IMAGE_NAME:-jonatan0897/pro_dev}"   # דוגמה: jonatan0897/pro_dev
 IMAGE_TAG="${IMAGE_TAG:-latest}"
-APP_PORT="${APP_PORT:-8000}"     # ברירת מחדל 8000 (לא 80)
-DOCKERHUB_USERNAME="${DOCKERHUB_USERNAME}"
-DOCKERHUB_TOKEN="${DOCKERHUB_TOKEN}"
+APP_PORT="${APP_PORT:-8000}"                      # הקונטיינר מאזין ל-8000; נמפה ל-80
+DOCKERHUB_USERNAME="${DOCKERHUB_USERNAME:-}"
+DOCKERHUB_TOKEN="${DOCKERHUB_TOKEN:-}"
 
-# קרדנצ'לים ל-Postgres על אותו EC2 (זול ופשוט להתחלה)
+# =========================
+# DB לוקלי (פשוט וזול להתחלה)
+# =========================
 DB_NAME="pro_dev"
 DB_USER="prodev"
 DB_PASS="prodevpass"
 
 export DEBIAN_FRONTEND=noninteractive
+
+# -------------------------
+# בסיס: עדכונים וכלי עזר
+# -------------------------
 apt-get update -y
 apt-get install -y ca-certificates curl gnupg lsb-release
 
-# התקנת Docker Engine הרשמי
+# אם UFW פעיל — נשבית (ה-SG של AWS מגן עלינו)
+ufw disable || true
+
+# -------------------------
+# התקנת Docker Engine רשמי
+# -------------------------
 install -m 0755 -d /etc/apt/keyrings
 curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
 chmod a+r /etc/apt/keyrings/docker.gpg
@@ -25,18 +38,25 @@ echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.
 apt-get update -y
 apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 
-# נוח להתחברות כמשתמש ubuntu
 usermod -aG docker ubuntu || true
 systemctl enable docker
 systemctl start docker
 
-# התחברות ל-Docker Hub (מונע rate limiting ומשיכה פרטית אם צריך)
-echo "${DOCKERHUB_TOKEN}" | docker login -u "${DOCKERHUB_USERNAME}" --password-stdin
+# -------------------------
+# Login ל-Docker Hub (ימנע rate-limit)
+# -------------------------
+if [ -n "${DOCKERHUB_USERNAME}" ] && [ -n "${DOCKERHUB_TOKEN}" ]; then
+  echo "${DOCKERHUB_TOKEN}" | docker login -u "${DOCKERHUB_USERNAME}" --password-stdin
+fi
 
-# ------- DB: Postgres + רשת משותפת -------
+# -------------------------
+# רשת משותפת לאפליקציה ול-DB
+# -------------------------
 docker network create myapp-net || true
 
-# הרם את ה-DB (ימשיך לעלות אוטומטית עם --restart)
+# -------------------------
+# Postgres מקומי כ־service מתמיד
+# -------------------------
 docker rm -f db || true
 docker run -d --name db --network myapp-net \
   --restart unless-stopped \
@@ -46,17 +66,19 @@ docker run -d --name db --network myapp-net \
   -v /var/lib/postgresql/data:/var/lib/postgresql/data \
   postgres:16-alpine
 
-# המתנה ל-DB מוכן
-for i in {1..40}; do
+# המתנה ש-DB מוכן
+for i in {1..60}; do
   if docker exec db pg_isready -U "${DB_USER}" >/dev/null 2>&1; then
     echo "DB ready"
     break
   fi
-  echo "Waiting for DB..."
+  echo "Waiting for DB... ($i/60)"
   sleep 3
 done
 
-# ------- Service לאפליקציה -------
+# -------------------------
+# systemd service לאפליקציה
+# -------------------------
 cat >/etc/systemd/system/myapp.service <<'SVC'
 [Unit]
 Description=MyApp container
@@ -68,7 +90,7 @@ Type=simple
 Restart=always
 # מושך את האימג' לפני הרצה
 ExecStartPre=/usr/bin/docker pull __IMAGE_NAME__:__IMAGE_TAG__
-# מריץ את הקונטיינר מחובר לרשת עם משתני סביבה
+# מריץ את הקונטיינר על אותה רשת כמו ה-DB, עם מיפוי פורט 80 חיצוני ל-APP_PORT פנימי
 ExecStart=/usr/bin/docker run --rm \
   --name myapp \
   --network myapp-net \
@@ -93,13 +115,29 @@ sed -i "s#__DB_PASS__#${DB_PASS}#g"       /etc/systemd/system/myapp.service
 systemctl daemon-reload
 systemctl enable --now myapp.service
 
-# בדיקת בריאות בסיסית על פורט 80 (ממופה ל-APP_PORT)
-for i in {1..30}; do
+# -------------------------
+# בריאות מקומית + לוגים לעזרה
+# -------------------------
+# נמתין עד 10 דקות כי משיכת אימג' והקמה ראשונית עלולות לקחת זמן
+ok=""
+for i in {1..120}; do  # 120*5s = 10 דקות
   sleep 5
   if curl -fsS http://127.0.0.1/healthz >/dev/null 2>&1; then
-    echo "Health OK"
-    exit 0
+    echo "Local Health OK"
+    ok="yes"
+    break
   fi
+  echo "Local wait $i..."
 done
-echo "Health check failed (no /healthz)"
-exit 1
+
+# דיאגנוסטיקה בסיסית לקונסול אם יש כשל
+systemctl status myapp --no-pager || true
+journalctl -u myapp -n 100 --no-pager || true
+docker ps || true
+
+if [ -z "$ok" ]; then
+  echo "Health check failed (no /healthz on localhost)"
+  exit 1
+fi
+
+echo "User-data finished successfully."
