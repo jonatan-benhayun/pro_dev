@@ -1,6 +1,7 @@
 # === Python ===
 __pycache__/
 *.py[cod]
+!scripts/seed_all.py
 *.pyo
 *.pyd
 *.so

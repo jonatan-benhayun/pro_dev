@@ -4,13 +4,12 @@ exec > >(tee -a /var/log/user-data.log) 2>&1
 echo "[user-data] starting at $(date -Iseconds)"
 
 # =========================
-# קונפיג מ-GitHub Actions (אם לא הוזרק — שמים ברירות מחדל בטוחות)
+# קונפיג מ-GitHub Actions (אם לא הוזרק — ברירות מחדל)
 # =========================
 IMAGE_NAME="${IMAGE_NAME:-jonatan0897/pro_dev}"
 IMAGE_TAG="${IMAGE_TAG:-latest}"
 APP_PORT="${APP_PORT:-8000}"
 
-# אופציונלי: התחברות לדוקר האב למניעת rate limit
 DOCKERHUB_USERNAME="${DOCKERHUB_USERNAME:-}"
 DOCKERHUB_TOKEN="${DOCKERHUB_TOKEN:-}"
 
@@ -31,12 +30,10 @@ export DEBIAN_FRONTEND=noninteractive
 # -------------------------
 apt-get update -y
 apt-get install -y ca-certificates curl gnupg lsb-release jq
-
-# אם UFW פעיל — נשבית (ה-Security Group של AWS מגן עלינו)
 ufw disable || true
 
 # -------------------------
-# התקנת Docker Engine רשמי + Compose V2
+# התקנת Docker Engine + Compose V2
 # -------------------------
 install -m 0755 -d /etc/apt/keyrings
 curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
@@ -61,44 +58,35 @@ fi
 mkdir -p /opt/myapp/nginx
 cd /opt/myapp
 
-# .env לכל השירותים (compose יטען אוטומטית)
+# .env (Compose טוען אוטומטית)
 cat > .env <<EOF
-# ===== DB =====
 POSTGRES_DB=${POSTGRES_DB}
 POSTGRES_USER=${POSTGRES_USER}
 POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
 
-# ===== App =====
 SECRET_KEY=${SECRET_KEY}
 FLASK_ENV=${FLASK_ENV}
 APP_PORT=${APP_PORT}
 NGINX_HOST_PORT=${NGINX_HOST_PORT}
 
-# נוח אם נרצה לבנות/למשוך:
 IMAGE_NAME=${IMAGE_NAME}
 IMAGE_TAG=${IMAGE_TAG}
 EOF
 
-# nginx.conf (reverse proxy ל-backend:8000)
+# nginx.conf
 cat > nginx/nginx.conf <<'EOF'
 server {
   listen 80 default_server;
   listen [::]:80 default_server;
 
-  # X-Forwarded-* ל-Flask
   proxy_set_header Host $host;
   proxy_set_header X-Real-IP $remote_addr;
   proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
   proxy_set_header X-Forwarded-Proto $scheme;
 
-  location / {
-    proxy_pass http://backend:8000/;
-  }
+  location / { proxy_pass http://backend:8000/; }
 
-  # בריאות נוחה
-  location /healthz {
-    proxy_pass http://backend:8000/healthz;
-  }
+  location /healthz { proxy_pass http://backend:8000/healthz; }
 }
 EOF
 
@@ -166,35 +154,28 @@ networks:
     driver: bridge
 EOF
 
-# -------------------------
-# הרצה ראשונית + בדיקות
-# -------------------------
-echo "[user-data] docker compose pull (מושך תמונות אם צריך)..."
+echo "[user-data] docker compose pull ..."
 docker compose pull || true
 
 echo "[user-data] docker compose up -d ..."
 docker compose up -d
 
-# המתנה עד 10 דקות לבריאות
+# =========================
+# המתנה ל-Health
+# =========================
 echo "[user-data] waiting for health..."
 ok=""
 for i in {1..120}; do
   sleep 5
   if curl -fsS http://127.0.0.1/healthz >/dev/null 2>&1; then
-    echo "Local Health OK (/healthz)"
-    ok="yes"
-    break
+    echo "Local Health OK (/healthz)"; ok="yes"; break
   fi
-  # ניסיון גיבוי דרך ה-backend ישירות
   if curl -fsS http://127.0.0.1/api/ping >/dev/null 2>&1; then
-    echo "Local Health OK (/api/ping)"
-    ok="yes"
-    break
+    echo "Local Health OK (/api/ping)"; ok="yes"; break
   fi
   echo "wait $i/120..."
 done
 
-# דיאגנוסטיקה במקרה כשל
 if [ -z "$ok" ]; then
   echo "Health check FAILED — dumping quick diagnostics"
   docker ps
@@ -205,8 +186,42 @@ if [ -z "$ok" ]; then
   exit 1
 fi
 
+# =========================
+# מיגרציות + SEED אידמפוטנטי
+# =========================
+echo "[user-data] running migrations (flask db upgrade)..."
+# ננסה Alembic; אם אין CLI – נבצע create_all כגיבוי
+docker compose exec -T backend bash -lc 'export FLASK_APP=wsgi.py; flask db upgrade || python - <<PY
+from app import create_app
+from app.extensions import db
+app = create_app()
+with app.app_context():
+    db.create_all()
+    print("[migrate] fallback create_all done")
+PY'
+
+echo "[user-data] running seed (scripts/seed_all.py, idempotent)..."
+docker compose exec -T backend python - <<'PY'
+from app import create_app
+from app.extensions import db
+from app.models import User
+try:
+    from scripts.seed_all import seed_all
+except Exception as e:
+    print("[seed] seed_all import failed:", e); raise
+
+app = create_app()
+with app.app_context():
+    exists = db.session.execute(db.select(User).limit(1)).first()
+    if exists:
+        print("[seed] users already exist; skipping.")
+    else:
+        seed_all()
+        print("[seed] done.")
+PY
+
 # -------------------------
-# שירות systemd שירים את ה-compose אחרי Reboot
+# שירות systemd להישרדות ריבוט
 # -------------------------
 cat > /etc/systemd/system/myapp-compose.service <<'EOF'
 [Unit]
