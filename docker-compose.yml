@@ -5,13 +5,13 @@ services:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL","pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
       timeout: 3s
       retries: 30
-    volumes:
-      - pgdata:/var/lib/postgresql/data
     networks: [appnet]
 
   backend:
@@ -20,20 +20,22 @@ services:
       dockerfile: Dockerfile.backend
     working_dir: /app
     environment:
-      DATABASE_URL: ${DATABASE_URL}
+      # נוצרים מקובץ .env או מ-user-data
       SECRET_KEY: ${SECRET_KEY}
       FLASK_ENV: ${FLASK_ENV}
-    # מריץ gunicorn (זהה ל-CMD שבתמונה; משאירים כאן לנראות)
+      APP_PORT: ${APP_PORT:-8000}
+      # בונים את ה-DATABASE_URL מהרכיבים – אין צורך לשים אותו ב-.env
+      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
     command: ["gunicorn","-w","2","-b","0.0.0.0:8000","wsgi:app"]
     depends_on:
       db:
         condition: service_healthy
     expose:
       - "8000"
-    # במקומי: נוח להשאיר mount. ב-CI גם עובד.
     volumes:
       - ./:/app
     healthcheck:
+      # משתמש בפייתון שכבר קיים באימג' שלך
       test: ["CMD-SHELL","python -c 'import urllib.request,sys; urllib.request.urlopen(\"http://localhost:8000/api/ping\", timeout=3); sys.exit(0)' || exit 1"]
       interval: 5s
       timeout: 3s
@@ -41,14 +43,20 @@ services:
     networks: [appnet]
 
   nginx:
-    image: nginx:alpine
+    image: nginx:stable-alpine
     ports:
-      - "${NGINX_HOST_PORT:-8000}:80"
+      - "${NGINX_HOST_PORT:-80}:80"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
     depends_on:
       backend:
         condition: service_healthy
+    healthcheck:
+      # busybox-wget קיים בתמונה; בודק שה-backend נגיש מהרשת הפנימית
+      test: ["CMD-SHELL", "wget -qO- http://backend:8000/api/ping | grep -q 'status'"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
     networks: [appnet]
 
 volumes:
