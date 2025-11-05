@@ -77,6 +77,8 @@ jobs:
         run: |
           mkdir -p out
           {
+            echo '#!/bin/bash'
+            echo 'set -euxo pipefail'
             echo "export IMAGE_NAME=${{ secrets.IMAGE_NAME }}"
             echo "export IMAGE_TAG=${{ github.sha }}"
             echo "export APP_PORT=${{ secrets.APP_PORT != '' && secrets.APP_PORT || '8000' }}"
@@ -86,6 +88,16 @@ jobs:
             cat deploy/user_data.sh
           } > out/final_user_data.sh
           chmod +x out/final_user_data.sh
+
+      - name: Debug – verify user_data file
+        run: |
+          echo "=== Showing final_user_data.sh ==="
+          pwd
+          ls -la out/
+          cat out/final_user_data.sh
+          echo "=== End of user_data ==="
+
+
 
       - name: Launch new EC2 (Ubuntu 22.04)
         id: launch
@@ -101,7 +113,7 @@ jobs:
             --instance-type t3.micro \
             --iam-instance-profile Name="${{ secrets.EC2_INSTANCE_PROFILE }}" \
             --security-group-ids "${{ secrets.EC2_SECURITY_GROUP_ID }}" \
-            --user-data file://out/final_user_data.sh \
+            --user-data file://$(pwd)/out/final_user_data.sh \
             --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=myapp-bluegreen},{Key=Stack,Value=myapp},{Key=Version,Value=${{ github.sha }}}]' \
             --query 'Instances[0].InstanceId' --output text)
 
