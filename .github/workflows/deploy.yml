@@ -114,6 +114,7 @@ jobs:
             --instance-type t3.micro \
             --iam-instance-profile Name="${{ secrets.EC2_INSTANCE_PROFILE }}" \
             --security-group-ids "${{ secrets.EC2_SECURITY_GROUP_ID }}" \
+            --key-name jb-monitoring-key \
             --user-data file://$(pwd)/out/final_user_data.sh \
             --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=myapp-bluegreen},{Key=Stack,Value=myapp},{Key=Version,Value=${{ github.sha }}}]' \
             --query 'Instances[0].InstanceId' --output text)
