@@ -157,6 +157,7 @@ jobs:
             --latest --output text | tail -n 200
 
       - name: Switch Elastic IP to new instance
+        if: github.ref_name == 'main'
         run: |
           ASSOC_ID=$(aws ec2 describe-addresses --allocation-ids "${{ secrets.EIP_ALLOCATION_ID }}" --query 'Addresses[0].AssociationId' --output text)
           if [ "$ASSOC_ID" != "None" ]; then
@@ -166,6 +167,7 @@ jobs:
           echo "EIP associated."
 
       - name: Terminate old instances (keep only the new one)
+        if: github.ref_name == 'main'
         run: |
           NEW="${{ steps.launch.outputs.INSTANCE_ID }}"
           OLD=$(aws ec2 describe-instances \
