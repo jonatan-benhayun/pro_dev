@@ -166,10 +166,13 @@ global:
   evaluation_interval: 15s
 
 scrape_configs:
-  - job_name: "flask-backend"
-    metrics_path: /metrics
+  - job_name: "prometheus"
     static_configs:
-      - targets: ["backend:8000"]
+      - targets: ["prometheus:9090"]
+
+  - job_name: "node"
+    static_configs:
+      - targets: ["node-exporter:9100"]
 
   - job_name: "cadvisor"
     static_configs:
@@ -178,11 +181,8 @@ scrape_configs:
   - job_name: "postgres"
     static_configs:
       - targets: ["postgres-exporter:9187"]
-
-  - job_name: "node"
-    static_configs:
-      - targets: ["127.0.0.1:9100"]
 EOF
+
 
 # docker-compose.monitor.yml – Prometheus, Grafana, cAdvisor, Postgres exporter, Node exporter
 cat > monitoring/docker-compose.monitor.yml <<'EOF'
@@ -247,13 +247,17 @@ services:
   node-exporter:
     image: quay.io/prometheus/node-exporter:latest
     command:
-      - '--path.rootfs=/host'
-      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
-    network_mode: host
-    pid: host
+      - --path.procfs=/host/proc
+      - --path.sysfs=/host/sys
+      - --path.rootfs=/rootfs
+      - --collector.filesystem.ignored-mount-points="^/(sys|proc|dev|host|etc)($|/)"
     volumes:
-      - '/:/host:ro,rslave'
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro,rslave
+    networks: [appnet]
     restart: unless-stopped
+
 
 volumes:
   prometheus-data:
