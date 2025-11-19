@@ -154,127 +154,15 @@ networks:
     driver: bridge
 EOF
 
-# =========================
-# === MONITORING ADDITIONS ===
-# =========================
-mkdir -p /opt/myapp/monitoring
-
-# קובץ קונפיג ל-Prometheus
-cat > monitoring/prometheus.yml <<'EOF'
-global:
-  scrape_interval: 15s
-  evaluation_interval: 15s
-
-scrape_configs:
-  - job_name: "prometheus"
-    static_configs:
-      - targets: ["prometheus:9090"]
-
-  - job_name: "node"
-    static_configs:
-      - targets: ["node-exporter:9100"]
-
-  - job_name: "cadvisor"
-    static_configs:
-      - targets: ["cadvisor:8080"]
-
-  - job_name: "postgres"
-    static_configs:
-      - targets: ["postgres-exporter:9187"]
-EOF
-
-
-# docker-compose.monitor.yml – Prometheus, Grafana, cAdvisor, Postgres exporter, Node exporter
-cat > monitoring/docker-compose.monitor.yml <<'EOF'
-services:
-  prometheus:
-    image: prom/prometheus:latest
-    command:
-      - "--config.file=/etc/prometheus/prometheus.yml"
-      - "--storage.tsdb.retention.time=15d"
-    volumes:
-      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      - prometheus-data:/prometheus
-    ports:
-      - "9090:9090"   # לא לפתוח ב-SG; ניגשים ב-SSH tunnel
-    depends_on:
-      - backend
-      - cadvisor
-      - postgres-exporter
-    restart: unless-stopped
-    networks: [appnet]
-
-  grafana:
-    image: grafana/grafana-oss:latest
-    environment:
-      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
-    volumes:
-      - grafana-data:/var/lib/grafana
-    ports:
-      - "3000:3000"   # כנ"ל
-    depends_on:
-      - prometheus
-    restart: unless-stopped
-    networks: [appnet]
-
-  cadvisor:
-    image: gcr.io/cadvisor/cadvisor:latest
-    privileged: true
-    volumes:
-      - /:/rootfs:ro
-      - /var/run:/var/run:rw
-      - /sys:/sys:ro
-      - /var/lib/docker/:/var/lib/docker:ro
-    expose:
-      - "8080"
-    restart: unless-stopped
-    networks: [appnet]
-
-  postgres-exporter:
-    image: prometheuscommunity/postgres-exporter:latest
-    environment:
-      - DATA_SOURCE_URI=${POSTGRES_HOST:-db}:5432/${POSTGRES_DB:-postgres}?sslmode=disable
-      - DATA_SOURCE_USER=${POSTGRES_USER}
-      - DATA_SOURCE_PASS=${POSTGRES_PASSWORD}
-    expose:
-      - "9187"
-    depends_on:
-      - db
-    restart: unless-stopped
-    networks: [appnet]
-
-  # מדידות שרת ה-EC2 עצמו
-  node-exporter:
-    image: quay.io/prometheus/node-exporter:latest
-    command:
-      - --path.procfs=/host/proc
-      - --path.sysfs=/host/sys
-      - --path.rootfs=/rootfs
-      - --collector.filesystem.ignored-mount-points="^/(sys|proc|dev|host|etc)($|/)"
-    volumes:
-      - /proc:/host/proc:ro
-      - /sys:/host/sys:ro
-      - /:/rootfs:ro,rslave
-    networks: [appnet]
-    restart: unless-stopped
-
-
-volumes:
-  prometheus-data:
-  grafana-data:
-EOF
-# =========================
-# === END MONITORING ADDITIONS ===
-# =========================
-
 echo "[user-data] docker compose pull ..."
-# מושך את כל הסטאק כולל מוניטורינג (אם יש תגיות חדשות)
-docker compose -f docker-compose.yml -f monitoring/docker-compose.monitor.yml pull || true
+# מושך את סטאק האפליקציה (ללא מוניטורינג)
+docker compose -f docker-compose.yml pull || true
 
-echo "[user-data] docker compose up -d (app + monitoring) ..."
-docker compose -f docker-compose.yml -f monitoring/docker-compose.monitor.yml up -d
+echo "[user-data] docker compose up -d (app only) ..."
+docker compose -f docker-compose.yml up -d
 
-# =========================
+
+#==========================
 # המתנה ל-Health
 # =========================
 echo "[user-data] waiting for health..."
@@ -293,14 +181,10 @@ done
 if [ -z "$ok" ]; then
   echo "Health check FAILED — dumping quick diagnostics"
   docker ps
-  docker compose -f docker-compose.yml -f monitoring/docker-compose.monitor.yml ps
+  docker compose -f docker-compose.yml ps || true
   docker compose logs --no-color --tail=200 db || true
   docker compose logs --no-color --tail=200 backend || true
   docker compose logs --no-color --tail=200 nginx || true
-  docker compose -f docker-compose.yml -f monitoring/docker-compose.monitor.yml logs --no-color --tail=100 prometheus || true
-  docker compose -f docker-compose.yml -f monitoring/docker-compose.monitor.yml logs --no-color --tail=100 grafana || true
-  docker compose -f docker-compose.yml -f monitoring/docker-compose.monitor.yml logs --no-color --tail=100 cadvisor || true
-  docker compose -f docker-compose.yml -f monitoring/docker-compose.monitor.yml logs --no-color --tail=100 postgres-exporter || true
   exit 1
 fi
 
@@ -342,15 +226,15 @@ PY
 # -------------------------
 cat > /etc/systemd/system/myapp-compose.service <<'EOF'
 [Unit]
-Description=MyApp via Docker Compose (App + Monitoring)
+Description=MyApp via Docker Compose (App only)
 After=network-online.target docker.service
 Wants=network-online.target
 
 [Service]
 Type=oneshot
 WorkingDirectory=/opt/myapp
-ExecStart=/usr/bin/docker compose -f docker-compose.yml -f monitoring/docker-compose.monitor.yml up -d
-ExecStop=/usr/bin/docker compose -f docker-compose.yml -f monitoring/docker-compose.monitor.yml down
+ExecStart=/usr/bin/docker compose -f docker-compose.yml up -d
+ExecStop=/usr/bin/docker compose -f docker-compose.yml down
 RemainAfterExit=yes
 
 [Install]
