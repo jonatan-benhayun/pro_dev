@@ -2,7 +2,7 @@ name: CI-CD BlueGreen EC2
 
 on:
   push:
-    branches: [ "main", "feature/monitoring-prometheus" ]
+    branches: [ "main" ]
   workflow_dispatch: {}
 
 permissions:
